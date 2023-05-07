@@ -4,113 +4,222 @@ use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
 use std::time::{Duration, Instant};
 
-// use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-// use cpal::{FromSample, SizedSample};
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+use cpal::{FromSample, SizedSample};
 // use fundsp::hacker::*;
 
-const SAMPLE_SIZE: usize = 512;
+const FREQ_RATIO: f64 = 1.25;
+const WEIGHTS_NUM: usize = 32;
+const SAMPLE_SIZE: usize = 44100;
+const SAMPLE_FREQ: f64 = 44100.0;
+const MIN_FREQ: f64 = 20.0;
+const MAX_FREQ: f64 = 20_000.0;
+
+const DEBUG_WEIGHTS: [f64; WEIGHTS_NUM] = [
+    1.0,
+    0.9811392012814704,
+    0.9717706804749016,
+    0.9620845228532783,
+    0.9520584314786297,
+    0.9416676760012369,
+    0.9308847251489949,
+    0.9196788071052001,
+    0.9080153800994131,
+    0.8958554902654713,
+    0.8831549866738044,
+    0.8698635536352637,
+    0.8559235067297116,
+    0.8412682797618402,
+    0.8258205022560471,
+    0.8094895268732046,
+    0.7921682063542231,
+    0.7737286288863457,
+    0.754016379890074,
+    0.7328426735604391,
+    0.7099733285108573,
+    0.6851129350852487,
+    0.6578814551411558,
+    0.6277784506674913,
+    0.5941261547656673,
+    0.5559743283015182,
+    0.5119312769223014,
+    0.45983940355260006,
+    0.39608410317711157,
+    0.31388922533374564,
+    0.19804205158855578,
+    0.0,
+];
 fn main() {
+    // save_white_noise();
+    // gen_freqs_convert();
+    // gen_white_noise_and_play()
+    gen_scaled_noise(&DEBUG_WEIGHTS);
+}
+
+fn save_white_noise() {
+    let wave1 = Wave64::render(44100.0, 10.0, &mut (white()));
+    wave1.save_wav16("test.wav").expect("Could not save wave.");
+}
+
+fn freq_index(i: usize) -> f64 {
+    min(MIN_FREQ * math::pow(FREQ_RATIO, i as f64), MAX_FREQ)
+}
+
+fn get_freq_weight(weights: &[f64; WEIGHTS_NUM], i: usize) -> f64 {
+    // some frequency between 0 and 22050 Hz.
+    let freq = SAMPLE_FREQ * (i as f64 / SAMPLE_SIZE as f64);
+
+    let mut left = (0.0, 0.0);
+    for j in 0..WEIGHTS_NUM {
+        let right_freq = freq_index(j);
+        let right_weight = weights[j];
+
+        if right_freq > freq {
+            // interpolate between left and right
+            let t = (freq - left.0) / (right_freq - left.0);
+            let weight = math::lerp(left.1, right_weight, t);
+            return weight;
+        } else if j == WEIGHTS_NUM - 1 {
+            // should interpolate
+            return right_weight;
+        } else {
+            left = (right_freq, right_weight);
+        }
+    }
+    unreachable!();
+}
+
+fn gen_scaled_noise(weights: &[f64; WEIGHTS_NUM]) {
+    let mut freqs = gen_white_freqs();
+
+    for i in 0..SAMPLE_SIZE / 2 {
+        let weight = get_freq_weight(weights, i);
+        freqs[i] *= weight;
+    }
+
+    // mirror frequencies in second half
+    for i in 0..SAMPLE_SIZE / 2 {
+        freqs[SAMPLE_SIZE / 2 + i] = freqs[SAMPLE_SIZE / 2 - 1 - i];
+    }
+
+    idct(&mut freqs);
+
+    play_samples(freqs);
+}
+
+fn gen_freqs_convert() {
+    // give every frequency the same weight
+    let mut samples = gen_white_freqs();
+    // for (i, s) in samples.iter_mut().enumerate() {
+    //     if i == 0 {
+    //         *s = 0.0;
+    //     } else {
+    //         *s = *s * log(i as f64);
+    //     }
+    // }
+    // let mut samples = vec![0.5; SAMPLE_SIZE];
+    // samples[0];
+
+    idct(&mut samples);
+    // normalize output
+    // println!("{:?}", samples);
+
+    draw_samples(&samples, &samples);
+    play_samples(samples);
+}
+
+fn gen_white_noise_and_play() {
     let mut samples = gen_white_fundsp();
 
     let mut samples_copy = samples.clone();
     dct(&mut samples_copy);
 
-    println!("{:?}", samples_copy);
+    // println!("{:?}", samples_copy);
+    println!("DC Component {:}", samples_copy[0]);
 
     idct(&mut samples_copy);
     // normalize output
-    for s in &mut samples_copy {
-        *s = 2.0 * *s / SAMPLE_SIZE as f64;
-    }
-
-    if samples == samples_copy {
-        println!("Inverse!");
-    } else {
-        println!("Non inverse!");
-        println!("{:?}", samples_copy);
-        // println!("{:?}", samples);
-    }
 
     draw_samples(&samples, &samples_copy);
-    // play_samples(samples_copy);
+    play_samples(samples_copy);
 }
 
-// fn play_samples(s: Vec<f64>) {
-//     let host = cpal::default_host();
+fn play_samples(s: Vec<f64>) {
+    let host = cpal::default_host();
 
-//     let device = host
-//         .default_output_device()
-//         .expect("Failed to find a default output device");
-//     let config = device.default_output_config().unwrap();
+    let device = host
+        .default_output_device()
+        .expect("Failed to find a default output device");
+    let config = device.default_output_config().unwrap();
 
-//     match config.sample_format() {
-//         cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), s).unwrap(),
-//         cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), s).unwrap(),
-//         cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), s).unwrap(),
-//         _ => panic!("Unsupported format"),
-//     }
-// }
+    match config.sample_format() {
+        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), s).unwrap(),
+        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), s).unwrap(),
+        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), s).unwrap(),
+        _ => panic!("Unsupported format"),
+    }
+}
 
-// fn run<T>(
-//     device: &cpal::Device,
-//     config: &cpal::StreamConfig,
-//     s: Vec<f64>,
-// ) -> Result<(), anyhow::Error>
-// where
-//     T: SizedSample + FromSample<f64>,
-// {
-//     let sample_rate = config.sample_rate.0 as f64;
-//     println!("sample rate: {}", sample_rate);
-//     let channels = config.channels as usize;
+fn run<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    s: Vec<f64>,
+) -> Result<(), anyhow::Error>
+where
+    T: SizedSample + FromSample<f64>,
+{
+    let sample_rate = config.sample_rate.0 as f64;
+    println!("sample rate: {}", sample_rate);
+    let channels = config.channels as usize;
 
-//     // let c =
-//     // let mut c = c;
-//     // c.reset(Some(sample_rate));
-//     // c.allocate();
+    // let c =
+    // let mut c = c;
+    // c.reset(Some(sample_rate));
+    // c.allocate();
 
-//     let mut samples = s.into_iter().cycle();
-//     let mut next_value = move || {
-//         let x = samples.next().unwrap();
-//         (x, x)
-//     };
+    let mut samples = s.into_iter().cycle();
+    let mut next_value = move || {
+        let x = samples.next().unwrap();
+        (x, x)
+    };
 
-//     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
+    let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
 
-//     let stream = device.build_output_stream(
-//         config,
-//         move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-//             write_data(data, channels, &mut next_value)
-//         },
-//         err_fn,
-//         None,
-//     )?;
-//     stream.play()?;
+    let stream = device.build_output_stream(
+        config,
+        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
+            write_data(data, channels, &mut next_value)
+        },
+        err_fn,
+        None,
+    )?;
+    stream.play()?;
 
-//     loop {
-//         std::thread::sleep(std::time::Duration::from_millis(50000));
-//     }
+    loop {
+        std::thread::sleep(std::time::Duration::from_millis(50000));
+    }
 
-//     Ok(())
-// }
+    Ok(())
+}
 
-// fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> (f64, f64))
-// where
-//     T: SizedSample + FromSample<f64>,
-// {
-//     for frame in output.chunks_mut(channels) {
-//         let sample = next_sample();
-//         let left = T::from_sample(sample.0);
-//         let right: T = T::from_sample(sample.1);
+fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> (f64, f64))
+where
+    T: SizedSample + FromSample<f64>,
+{
+    for frame in output.chunks_mut(channels) {
+        let sample = next_sample();
+        let left = T::from_sample(sample.0);
+        let right: T = T::from_sample(sample.1);
 
-//         for (channel, sample) in frame.iter_mut().enumerate() {
-//             if channel & 1 == 0 {
-//                 *sample = left;
-//             } else {
-//                 *sample = right;
-//             }
-//         }
-//     }
-// }
+        for (channel, sample) in frame.iter_mut().enumerate() {
+            if channel & 1 == 0 {
+                *sample = left;
+            } else {
+                *sample = right;
+            }
+        }
+    }
+}
 
 fn draw_samples(s1: &[f64], s2: &[f64]) {
     let root = BitMapBackend::new("samples.png", (1280, 780)).into_drawing_area();
@@ -164,6 +273,11 @@ fn dct(fs: &mut [f64]) {
     let dct = DctPlanner::new().plan_dct2(fs.len());
     dct.process_dct2(fs);
 
+    let scale: f64 = sqrt(2.0 / SAMPLE_SIZE as f64);
+    for f in fs {
+        *f = *f * scale;
+    }
+
     // println!("{:#?}", fs);
     println!("Took {}", now.elapsed().as_millis());
 }
@@ -173,6 +287,11 @@ fn idct(fs: &mut [f64]) {
     let idct = DctPlanner::new().plan_dct3(fs.len());
     idct.process_dct3(fs);
 
+    let scale: f64 = sqrt(2.0 / SAMPLE_SIZE as f64);
+    for f in fs {
+        *f = *f * scale;
+    }
+
     // println!("{:#?}", fs);
     println!("Took {}", now.elapsed().as_millis());
 }
@@ -181,74 +300,14 @@ fn gen_white() -> Vec<f64> {
     let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
     let mut small_rng = rand::rngs::SmallRng::from_entropy();
     let mut my_signal: Vec<f64> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
-    println!("{:#?}", my_signal);
 
     my_signal
 }
 
-const freqs: [f64; 511] = [
-    -15.266013, -21.110165, -24.684015, -27.254696, -29.272884, -30.983770, -32.434902, -33.648304,
-    -34.946552, -36.010014, -36.875290, -37.905144, -38.613041, -39.382053, -40.156601, -40.797516,
-    -41.494705, -42.018295, -42.686287, -43.200127, -43.695324, -44.319511, -44.685356, -45.219639,
-    -45.606403, -46.077812, -46.403687, -46.837013, -47.196835, -47.518425, -47.878262, -48.258553,
-    -48.504406, -48.826626, -49.110264, -49.391762, -49.683029, -49.953758, -50.218781, -50.515141,
-    -50.677994, -50.960361, -51.173336, -51.418427, -51.586868, -51.847073, -52.019901, -52.259201,
-    -52.467915, -52.643764, -52.816925, -53.012291, -53.198608, -53.395191, -53.542931, -53.687782,
-    -53.893452, -54.073051, -54.206261, -54.353172, -54.520649, -54.663517, -54.837410, -54.974072,
-    -55.123650, -55.308640, -55.401451, -55.560600, -55.659832, -55.816769, -55.957314, -56.065662,
-    -56.197338, -56.291607, -56.423203, -56.554173, -56.655220, -56.820946, -56.925835, -57.032665,
-    -57.124107, -57.241608, -57.334644, -57.476242, -57.559235, -57.676941, -57.780121, -57.824844,
-    -57.973686, -58.034370, -58.166286, -58.256321, -58.377651, -58.450310, -58.519238, -58.614086,
-    -58.728077, -58.784145, -58.898186, -58.950909, -59.052456, -59.176315, -59.271954, -59.297482,
-    -59.398476, -59.499100, -59.572361, -59.628315, -59.711231, -59.824066, -59.882000, -59.945808,
-    -60.030701, -60.124180, -60.183533, -60.291679, -60.335979, -60.417683, -60.486370, -60.582767,
-    -60.652462, -60.705231, -60.771160, -60.823914, -60.913177, -60.981152, -61.036987, -61.105942,
-    -61.177025, -61.209320, -61.287209, -61.353199, -61.426540, -61.486443, -61.566444, -61.625240,
-    -61.683853, -61.736534, -61.802113, -61.885365, -61.931870, -61.965435, -62.081551, -62.089413,
-    -62.148239, -62.188473, -62.279099, -62.323780, -62.391411, -62.428917, -62.495483, -62.547832,
-    -62.616501, -62.669983, -62.697926, -62.741791, -62.809601, -62.863777, -62.880733, -62.968891,
-    -63.052113, -63.101906, -63.142235, -63.160019, -63.227108, -63.289032, -63.335938, -63.364792,
-    -63.415886, -63.454510, -63.518951, -63.562283, -63.619972, -63.622887, -63.699364, -63.722420,
-    -63.779228, -63.841732, -63.872044, -63.909298, -63.964287, -64.023865, -64.059006, -64.103020,
-    -64.137085, -64.185013, -64.216919, -64.280113, -64.306511, -64.336395, -64.380287, -64.430794,
-    -64.480530, -64.483719, -64.546906, -64.591911, -64.623878, -64.682312, -64.703949, -64.740463,
-    -64.781143, -64.845566, -64.856224, -64.887512, -64.945465, -64.969200, -65.011139, -65.049118,
-    -65.092216, -65.142418, -65.160522, -65.196236, -65.198807, -65.219269, -65.236465, -65.295364,
-    -65.311867, -65.347298, -65.395042, -65.430496, -65.446022, -65.479378, -65.527153, -65.559364,
-    -65.575111, -65.583794, -65.627846, -65.662430, -65.717682, -65.721893, -65.774063, -65.806267,
-    -65.843246, -65.867386, -65.907547, -65.970634, -65.966034, -66.010666, -66.011681, -66.045937,
-    -66.064606, -66.107864, -66.130302, -66.167160, -66.184883, -66.253761, -66.247047, -66.310631,
-    -66.313728, -66.311630, -66.372368, -66.396240, -66.430832, -66.444420, -66.470154, -66.524193,
-    -66.549309, -66.598625, -66.588036, -66.611885, -66.657463, -66.689224, -66.696213, -66.724113,
-    -66.764900, -66.765190, -66.802856, -66.847191, -66.856010, -66.899017, -66.899048, -66.930077,
-    -66.963013, -66.960220, -66.998695, -67.015404, -67.042931, -67.065422, -67.093140, -67.118637,
-    -67.153191, -67.163361, -67.173439, -67.217537, -67.249077, -67.257339, -67.290611, -67.301781,
-    -67.330887, -67.344788, -67.367767, -67.415062, -67.405205, -67.431702, -67.477158, -67.478470,
-    -67.495499, -67.539894, -67.506119, -67.548073, -67.584030, -67.593971, -67.626518, -67.648216,
-    -67.662292, -67.666351, -67.686272, -67.703041, -67.734383, -67.770653, -67.784447, -67.799530,
-    -67.805595, -67.813286, -67.846359, -67.858170, -67.897499, -67.884949, -67.931755, -67.925163,
-    -67.945686, -67.976624, -67.980888, -68.030983, -68.053818, -68.049553, -68.076546, -68.095932,
-    -68.112732, -68.135017, -68.138176, -68.164116, -68.208542, -68.265640, -68.278244, -68.297737,
-    -68.310242, -68.329727, -68.339821, -68.358116, -68.374947, -68.396660, -68.413887, -68.429153,
-    -68.444374, -68.459480, -68.474419, -68.489182, -68.503777, -68.518135, -68.532341, -68.548370,
-    -68.561562, -68.575684, -68.589760, -68.603668, -68.617348, -68.630951, -68.644524, -68.658066,
-    -68.671402, -68.684669, -68.697815, -68.710869, -68.723831, -68.736679, -68.749443, -68.762108,
-    -68.774643, -68.787086, -68.799431, -68.811684, -68.823830, -68.835869, -68.847816, -68.859680,
-    -68.871391, -68.882988, -68.894493, -68.905869, -68.917068, -68.927788, -68.937675, -68.957962,
-    -68.963249, -68.973030, -68.983810, -68.994644, -69.005341, -69.015884, -69.026268, -69.036560,
-    -69.046799, -69.056923, -69.066956, -69.076904, -69.086731, -69.096489, -69.106163, -69.115730,
-    -69.125206, -69.134583, -69.143875, -69.153084, -69.162170, -69.171181, -69.180092, -69.188881,
-    -69.197609, -69.206207, -69.214714, -69.223045, -69.231056, -69.238556, -69.245132, -69.261757,
-    -69.266762, -69.273537, -69.281242, -69.288948, -69.296555, -69.304085, -69.311523, -69.318901,
-    -69.326172, -69.333405, -69.340538, -69.347580, -69.354538, -69.361404, -69.368202, -69.374901,
-    -69.381516, -69.388039, -69.394485, -69.400833, -69.407104, -69.413277, -69.419357, -69.425346,
-    -69.431244, -69.437065, -69.442802, -69.448402, -69.453743, -69.458664, -69.462975, -69.472466,
-    -69.478088, -69.482254, -69.486977, -69.491768, -69.496605, -69.501381, -69.506096, -69.510750,
-    -69.515305, -69.519806, -69.524216, -69.528542, -69.532784, -69.536949, -69.541046, -69.545036,
-    -69.548973, -69.552826, -69.556587, -69.560272, -69.563896, -69.567436, -69.570900, -69.574303,
-    -69.577629, -69.580940, -69.584251, -69.587578, -69.590988, -69.595001, -69.601532, -69.593506,
-    -69.593597, -69.599823, -69.603050, -69.605644, -69.608147, -69.610550, -69.612793, -69.614830,
-    -69.616844, -69.618752, -69.620560, -69.622284, -69.623894, -69.625427, -69.626892, -69.628265,
-    -69.629539, -69.630737, -69.631844, -69.632874, -69.633812, -69.634697, -69.635475, -69.636192,
-    -69.636757, -69.637268, -69.637726, -69.637978, -69.637962, -69.637718, -69.637787,
-];
+fn gen_white_freqs() -> Vec<f64> {
+    let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
+    let mut small_rng = rand::rngs::SmallRng::from_entropy();
+    let mut my_freqs: Vec<f64> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
+
+    my_freqs
+}
