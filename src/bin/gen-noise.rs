@@ -8,9 +8,9 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 // use fundsp::hacker::*;
 
-const FREQ_RATIO: f64 = 1.25;
+// const FREQ_RATIO: f64 = 1.25;
 const WEIGHTS_NUM: usize = 32;
-const SAMPLE_SIZE: usize = 44100;
+const SAMPLE_SIZE: usize = 44100 * 10;
 const SAMPLE_FREQ: f64 = 44100.0;
 const MIN_FREQ: f64 = 20.0;
 const MAX_FREQ: f64 = 20_000.0;
@@ -49,11 +49,113 @@ const DEBUG_WEIGHTS: [f64; WEIGHTS_NUM] = [
     0.19804205158855578,
     0.0,
 ];
+
+const DEBUG_WEIGHTS2: [f64; WEIGHTS_NUM] = [
+    1.0,
+    0.9811392012814704,
+    0.9717706804749016,
+    0.9620845228532783,
+    0.8520584314786297,
+    0.8416676760012369,
+    0.8308847251489949,
+    0.7196788071052001,
+    0.7080153800994131,
+    0.7958554902654713,
+    0.6831549866738044,
+    0.5698635536352637,
+    0.5559235067297116,
+    0.5412682797618402,
+    0.5258205022560471,
+    0.4094895268732046,
+    0.4921682063542231,
+    0.4737286288863457,
+    0.354016379890074,
+    0.3328426735604391,
+    0.3099733285108573,
+    0.2851129350852487,
+    0.1578814551411558,
+    0.1277784506674913,
+    0.0941261547656673,
+    0.0559743283015182,
+    0.0119312769223014,
+    0.05983940355260006,
+    0.09608410317711157,
+    0.01388922533374564,
+    0.09804205158855578,
+    0.0,
+];
 fn main() {
+    let mode = std::env::args().nth(1).unwrap();
+
+    match mode.as_ref() {
+        "white" => gen_freqs_convert(),
+        "white2" => gen_white_noise_and_play(),
+        "white3" => gen_freqs_convert_low(),
+        "white4" => gen_freqs_convert_high(),
+        "brown" => gen_weighted_noise(&DEBUG_WEIGHTS2),
+        "brown2" => gen_weighted_noise_no_mirror(&DEBUG_WEIGHTS2),
+        "testdct" => test_dct(),
+        "testdct2" => test_dct2(),
+        _ => println!("Malformed argument"),
+    }
     // save_white_noise();
-    // gen_freqs_convert();
-    // gen_white_noise_and_play()
-    gen_scaled_noise(&DEBUG_WEIGHTS);
+}
+
+fn test_dct() {
+    let mut samples = Vec::new();
+    for i in 0..=512 {
+        let r = 220.0 * i as f64 / 512 as f64 * 2.0 * math::PI;
+        let s = sin(r);
+        samples.push(s);
+    }
+    println!("{:?}", samples);
+
+    dct(&mut samples);
+    for x in &mut samples {
+        if *x < 0.01 {
+            *x = 0.0;
+        }
+    }
+    println!("{:?}", samples)
+}
+
+fn test_dct2() {
+    fn help(i: usize) {
+        let mut samples = vec![0.0; 256];
+        samples[i] = 10.0;
+
+        idct(&mut samples);
+        let filename = format!("testdct/{:0>3}.png", i);
+        let root = BitMapBackend::new(&filename, (1280, 780)).into_drawing_area();
+        root.fill(&WHITE).unwrap();
+        let mut chart = ChartBuilder::on(&root)
+            .margin(5)
+            .x_label_area_size(30)
+            .y_label_area_size(30)
+            .build_cartesian_2d(0..256usize, -0.1f64..1f64)
+            .unwrap();
+
+        chart.configure_mesh().draw().unwrap();
+
+        chart
+            .draw_series(LineSeries::new(
+                samples.into_iter().enumerate().map(|(x, y)| (x, y)),
+                &RED,
+            ))
+            .unwrap();
+
+        chart
+            .configure_series_labels()
+            .background_style(&WHITE.mix(0.8))
+            .border_style(&BLACK)
+            .draw()
+            .unwrap();
+
+        root.present().unwrap();
+    }
+    for i in 0..256 {
+        help(i);
+    }
 }
 
 fn save_white_noise() {
@@ -61,45 +163,63 @@ fn save_white_noise() {
     wave1.save_wav16("test.wav").expect("Could not save wave.");
 }
 
-fn freq_index(i: usize) -> f64 {
-    min(MIN_FREQ * math::pow(FREQ_RATIO, i as f64), MAX_FREQ)
-}
-
-fn get_freq_weight(weights: &[f64; WEIGHTS_NUM], i: usize) -> f64 {
+fn get_freq_weight(weights: &[f64; WEIGHTS_NUM], freq: f64) -> f64 {
     // some frequency between 0 and 22050 Hz.
-    let freq = SAMPLE_FREQ * (i as f64 / SAMPLE_SIZE as f64);
-
-    let mut left = (0.0, 0.0);
-    for j in 0..WEIGHTS_NUM {
-        let right_freq = freq_index(j);
-        let right_weight = weights[j];
-
-        if right_freq > freq {
-            // interpolate between left and right
-            let t = (freq - left.0) / (right_freq - left.0);
-            let weight = math::lerp(left.1, right_weight, t);
-            return weight;
-        } else if j == WEIGHTS_NUM - 1 {
-            // should interpolate
-            return right_weight;
-        } else {
-            left = (right_freq, right_weight);
-        }
+    // we want to compute a weight based on weights between MIN_FREQ and MAX_FREQ
+    if freq <= MIN_FREQ {
+        return weights[0];
+    } else if freq >= MAX_FREQ {
+        return weights[weights.len() - 1];
     }
-    unreachable!();
+
+    // the ratio between consecutive frequencies of our weights
+    let freq_ratio = (MAX_FREQ / MIN_FREQ).powf(1.0 / (WEIGHTS_NUM - 1) as f64);
+    // which weight bin `freq` belongs to
+    let weight_bin = f64::log(freq / MIN_FREQ, freq_ratio).clamp(0.0, (WEIGHTS_NUM - 1) as f64);
+    let (left, right) = (weight_bin.floor(), weight_bin.ceil());
+
+    let t = weight_bin - left;
+    let weight = f64::lerp(weights[left as usize], weights[right as usize], t);
+    return weight;
 }
 
-fn gen_scaled_noise(weights: &[f64; WEIGHTS_NUM]) {
+fn freq_domain_bin(i: usize) -> f64 {
+    SAMPLE_FREQ * i as f64 / SAMPLE_SIZE as f64
+}
+
+fn freq_domain_bin2(i: usize) -> f64 {
+    SAMPLE_FREQ * i as f64 / (2.0 * SAMPLE_SIZE as f64)
+}
+
+fn gen_weighted_noise(weights: &[f64; WEIGHTS_NUM]) {
     let mut freqs = gen_white_freqs();
 
     for i in 0..SAMPLE_SIZE / 2 {
-        let weight = get_freq_weight(weights, i);
+        // get the frequency bin of i in the frequency domain
+        let freq = freq_domain_bin(i);
+        let weight = get_freq_weight(weights, freq);
         freqs[i] *= weight;
     }
 
     // mirror frequencies in second half
     for i in 0..SAMPLE_SIZE / 2 {
         freqs[SAMPLE_SIZE / 2 + i] = freqs[SAMPLE_SIZE / 2 - 1 - i];
+        // freqs[SAMPLE_SIZE / 2 + i] = 0.0;
+    }
+
+    idct(&mut freqs);
+
+    play_samples(freqs);
+}
+
+fn gen_weighted_noise_no_mirror(weights: &[f64; WEIGHTS_NUM]) {
+    let mut freqs = gen_white_freqs();
+
+    for i in 0..SAMPLE_SIZE {
+        // get the frequency bin of i in the frequency domain
+        let freq = freq_domain_bin2(i);
+        let weight = get_freq_weight(weights, freq);
+        freqs[i] *= weight;
     }
 
     idct(&mut freqs);
@@ -110,21 +230,41 @@ fn gen_scaled_noise(weights: &[f64; WEIGHTS_NUM]) {
 fn gen_freqs_convert() {
     // give every frequency the same weight
     let mut samples = gen_white_freqs();
-    // for (i, s) in samples.iter_mut().enumerate() {
-    //     if i == 0 {
-    //         *s = 0.0;
-    //     } else {
-    //         *s = *s * log(i as f64);
-    //     }
-    // }
-    // let mut samples = vec![0.5; SAMPLE_SIZE];
-    // samples[0];
 
     idct(&mut samples);
-    // normalize output
     // println!("{:?}", samples);
 
-    draw_samples(&samples, &samples);
+    // draw_samples(&samples, &samples);
+    play_samples(samples);
+}
+
+fn gen_freqs_convert_low() {
+    // give every frequency the same weight
+    let mut samples = gen_white_freqs();
+
+    for i in SAMPLE_SIZE / 2 + 1..SAMPLE_SIZE {
+        samples[i] = 0.0;
+    }
+
+    idct(&mut samples);
+    // println!("{:?}", samples);
+
+    // draw_samples(&samples, &samples);
+    play_samples(samples);
+}
+
+fn gen_freqs_convert_high() {
+    // give every frequency the same weight
+    let mut samples = gen_white_freqs();
+
+    for i in 0..SAMPLE_SIZE / 2 {
+        samples[i] = 0.0;
+    }
+
+    idct(&mut samples);
+    // println!("{:?}", samples);
+
+    // draw_samples(&samples, &samples);
     play_samples(samples);
 }
 
@@ -140,7 +280,7 @@ fn gen_white_noise_and_play() {
     idct(&mut samples_copy);
     // normalize output
 
-    draw_samples(&samples, &samples_copy);
+    // draw_samples(&samples, &samples_copy);
     play_samples(samples_copy);
 }
 
@@ -233,18 +373,18 @@ fn draw_samples(s1: &[f64], s2: &[f64]) {
 
     chart.configure_mesh().draw().unwrap();
 
-    // chart
-    //     .draw_series(LineSeries::new(
-    //         s1.iter().enumerate().map(|(x, y)| (x, *y)),
-    //         &RED,
-    //     ))
-    //     .unwrap();
-    // chart
-    //     .draw_series(LineSeries::new(
-    //         s2.iter().enumerate().map(|(x, y)| (x, *y)),
-    //         &BLUE,
-    //     ))
-    //     .unwrap();
+    chart
+        .draw_series(LineSeries::new(
+            s1.iter().enumerate().map(|(x, y)| (x, *y)),
+            &RED,
+        ))
+        .unwrap();
+    chart
+        .draw_series(LineSeries::new(
+            s2.iter().enumerate().map(|(x, y)| (x, *y)),
+            &BLUE,
+        ))
+        .unwrap();
 
     chart
         .configure_series_labels()
