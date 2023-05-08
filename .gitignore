@@ -1,1 +1,7 @@
 /target
+
+*.txt
+*.mm_profdata
+*.svg
+*.png
+*.wav
