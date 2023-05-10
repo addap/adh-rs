@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+    <canvas id="myCanvas" width="200" height="100" style="border:1px solid #d3d3d3;">
+        Your browser does not support the HTML canvas tag.</canvas>
+
+    <script>
+        var c = document.getElementById("myCanvas");
+        var ctx = c.getContext("2d");
+        let segments_num = 32;
+        let segments_width = 10;
+        let segments_weight_max = 100;
+        let segments = Array(segments_num).fill(10);
+        c.width = segments_num * segments_width;
+        c.height = segments_weight_max + 20;
+
+        function clamp(x, a, b) {
+            return Math.max(a, Math.min(x, b));
+        }
+
+        function set_segment(x, y) {
+            let segment = clamp(Math.floor(x / segments_width), 0, segments_num - 1);
+            let y2 = clamp(y, 10, segments_weight_max + 10);
+
+            segments[segment] = y2;
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, c.width, c.height);
+
+            let gradient = ctx.createLinearGradient(0, 110, c.width, 120);
+            gradient.addColorStop(0, "maroon");
+            gradient.addColorStop(0.1, "red");
+            gradient.addColorStop(0.3, "yellow");
+            gradient.addColorStop(0.5, "green");
+            gradient.addColorStop(0.7, "aqua");
+            gradient.addColorStop(0.9, "blue");
+            gradient.addColorStop(1, "purple");
+            // Set the fill style and draw a rectangle
+            ctx.fillStyle = gradient;
+            // ctx.fillRect(0, 110, c.width, 10);
+
+            // ctx.beginPath();
+            for (var i = 0; i < segments_num; i++) {
+                let x = i * segments_width;
+                let y = segments[i];
+                // ctx.moveTo(x, y);
+                // ctx.lineTo(x + segments_width, y);
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(x, y, segments_width, 120 - y);
+
+                ctx.fillStyle = "black";
+                ctx.fillRect(x, y - 5, segments_width, 5);
+                ctx.beginPath();
+                ctx.moveTo(x, y - 4);
+                ctx.lineTo(x, 120);
+                ctx.moveTo(x + segments_width, y - 4);
+                ctx.lineTo(x + segments_width, 120);
+                ctx.stroke();
+            }
+            // ctx.stroke();
+
+        }
+
+        function handlemm(event) {
+            let currX = event.clientX - c.offsetLeft;
+            let currY = event.clientY - c.offsetTop;
+
+            // left mouse button pressed
+            if (event.buttons & 1 || event.button & 1) {
+                set_segment(currX, currY);
+                draw();
+            }
+        }
+        c.addEventListener("mousemove", handlemm);
+        c.addEventListener("mousedown", handlemm);
+
+        draw();
+    </script>
+
+</body>
+
+</html>
