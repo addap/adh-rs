@@ -1,21 +1,21 @@
 use fundsp::prelude::*;
-use plotters::prelude::*;
+// use plotters::prelude::*;
 use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
+use std::f32::consts::PI;
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
-// use fundsp::hacker::*;
 
-// const FREQ_RATIO: f64 = 1.25;
+// const FREQ_RATIO: f32 = 1.25;
 const WEIGHTS_NUM: usize = 32;
 const SAMPLE_SIZE: usize = 44100 * 10;
-const SAMPLE_FREQ: f64 = 44100.0;
-const MIN_FREQ: f64 = 20.0;
-const MAX_FREQ: f64 = 20_000.0;
+const SAMPLE_FREQ: f32 = 44100.0;
+const MIN_FREQ: f32 = 20.0;
+const MAX_FREQ: f32 = 20_000.0;
 
-const DEBUG_WEIGHTS: [f64; WEIGHTS_NUM] = [
+const DEBUG_WEIGHTS: [f32; WEIGHTS_NUM] = [
     1.0,
     0.9811392012814704,
     0.9717706804749016,
@@ -50,7 +50,7 @@ const DEBUG_WEIGHTS: [f64; WEIGHTS_NUM] = [
     0.0,
 ];
 
-const DEBUG_WEIGHTS2: [f64; WEIGHTS_NUM] = [
+const DEBUG_WEIGHTS2: [f32; WEIGHTS_NUM] = [
     1.0,
     0.9811392012814704,
     0.9717706804749016,
@@ -104,7 +104,7 @@ fn main() {
 fn test_dct() {
     let mut samples = Vec::new();
     for i in 0..=512 {
-        let r = 220.0 * i as f64 / 512 as f64 * 2.0 * math::PI;
+        let r = 220.0 * i as f32 / 512 as f32 * 2.0 * PI;
         let s = sin(r);
         samples.push(s);
     }
@@ -125,33 +125,33 @@ fn test_dct2() {
         samples[i] = 10.0;
 
         idct(&mut samples);
-        let filename = format!("testdct/{:0>3}.png", i);
-        let root = BitMapBackend::new(&filename, (1280, 780)).into_drawing_area();
-        root.fill(&WHITE).unwrap();
-        let mut chart = ChartBuilder::on(&root)
-            .margin(5)
-            .x_label_area_size(30)
-            .y_label_area_size(30)
-            .build_cartesian_2d(0..256usize, -0.1f64..1f64)
-            .unwrap();
+        // let filename = format!("testdct/{:0>3}.png", i);
+        // let root = BitMapBackend::new(&filename, (1280, 780)).into_drawing_area();
+        // root.fill(&WHITE).unwrap();
+        // let mut chart = ChartBuilder::on(&root)
+        //     .margin(5)
+        //     .x_label_area_size(30)
+        //     .y_label_area_size(30)
+        //     .build_cartesian_2d(0..256usize, -0.1f32..1f32)
+        //     .unwrap();
 
-        chart.configure_mesh().draw().unwrap();
+        // chart.configure_mesh().draw().unwrap();
 
-        chart
-            .draw_series(LineSeries::new(
-                samples.into_iter().enumerate().map(|(x, y)| (x, y)),
-                &RED,
-            ))
-            .unwrap();
+        // chart
+        //     .draw_series(LineSeries::new(
+        //         samples.into_iter().enumerate().map(|(x, y)| (x, y)),
+        //         &RED,
+        //     ))
+        //     .unwrap();
 
-        chart
-            .configure_series_labels()
-            .background_style(&WHITE.mix(0.8))
-            .border_style(&BLACK)
-            .draw()
-            .unwrap();
+        // chart
+        //     .configure_series_labels()
+        //     .background_style(&WHITE.mix(0.8))
+        //     .border_style(&BLACK)
+        //     .draw()
+        //     .unwrap();
 
-        root.present().unwrap();
+        // root.present().unwrap();
     }
     for i in 0..256 {
         help(i);
@@ -163,7 +163,7 @@ fn save_white_noise() {
     wave1.save_wav16("test.wav").expect("Could not save wave.");
 }
 
-fn get_freq_weight(weights: &[f64; WEIGHTS_NUM], freq: f64) -> f64 {
+fn get_freq_weight(weights: &[f32; WEIGHTS_NUM], freq: f32) -> f32 {
     // some frequency between 0 and 22050 Hz.
     // we want to compute a weight based on weights between MIN_FREQ and MAX_FREQ
     if freq <= MIN_FREQ {
@@ -173,25 +173,25 @@ fn get_freq_weight(weights: &[f64; WEIGHTS_NUM], freq: f64) -> f64 {
     }
 
     // the ratio between consecutive frequencies of our weights
-    let freq_ratio = (MAX_FREQ / MIN_FREQ).powf(1.0 / (WEIGHTS_NUM - 1) as f64);
+    let freq_ratio = (MAX_FREQ / MIN_FREQ).powf(1.0 / (WEIGHTS_NUM - 1) as f32);
     // which weight bin `freq` belongs to
-    let weight_bin = f64::log(freq / MIN_FREQ, freq_ratio).clamp(0.0, (WEIGHTS_NUM - 1) as f64);
+    let weight_bin = f32::log(freq / MIN_FREQ, freq_ratio).clamp(0.0, (WEIGHTS_NUM - 1) as f32);
     let (left, right) = (weight_bin.floor(), weight_bin.ceil());
 
     let t = weight_bin - left;
-    let weight = f64::lerp(weights[left as usize], weights[right as usize], t);
+    let weight = f32::lerp(weights[left as usize], weights[right as usize], t);
     return weight;
 }
 
-fn freq_domain_bin(i: usize) -> f64 {
-    SAMPLE_FREQ * i as f64 / SAMPLE_SIZE as f64
+fn freq_domain_bin(i: usize) -> f32 {
+    SAMPLE_FREQ * i as f32 / SAMPLE_SIZE as f32
 }
 
-fn freq_domain_bin2(i: usize) -> f64 {
-    SAMPLE_FREQ * i as f64 / (2.0 * SAMPLE_SIZE as f64)
+fn freq_domain_bin2(i: usize) -> f32 {
+    SAMPLE_FREQ * i as f32 / (2.0 * SAMPLE_SIZE as f32)
 }
 
-fn gen_weighted_noise(weights: &[f64; WEIGHTS_NUM]) {
+fn gen_weighted_noise(weights: &[f32; WEIGHTS_NUM]) {
     let mut freqs = gen_white_freqs();
 
     for i in 0..SAMPLE_SIZE / 2 {
@@ -212,7 +212,7 @@ fn gen_weighted_noise(weights: &[f64; WEIGHTS_NUM]) {
     play_samples(freqs);
 }
 
-fn gen_weighted_noise_no_mirror(weights: &[f64; WEIGHTS_NUM]) {
+fn gen_weighted_noise_no_mirror(weights: &[f32; WEIGHTS_NUM]) {
     let mut freqs = gen_white_freqs();
 
     for i in 0..SAMPLE_SIZE {
@@ -284,7 +284,7 @@ fn gen_white_noise_and_play() {
     play_samples(samples_copy);
 }
 
-fn play_samples(s: Vec<f64>) {
+fn play_samples(s: Vec<f32>) {
     let host = cpal::default_host();
 
     let device = host
@@ -303,12 +303,12 @@ fn play_samples(s: Vec<f64>) {
 fn run<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    s: Vec<f64>,
+    s: Vec<f32>,
 ) -> Result<(), anyhow::Error>
 where
-    T: SizedSample + FromSample<f64>,
+    T: SizedSample + FromSample<f32>,
 {
-    let sample_rate = config.sample_rate.0 as f64;
+    let sample_rate = config.sample_rate.0 as f32;
     println!("sample rate: {}", sample_rate);
     let channels = config.channels as usize;
 
@@ -342,9 +342,9 @@ where
     Ok(())
 }
 
-fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> (f64, f64))
+fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> (f32, f32))
 where
-    T: SizedSample + FromSample<f64>,
+    T: SizedSample + FromSample<f32>,
 {
     for frame in output.chunks_mut(channels) {
         let sample = next_sample();
@@ -361,43 +361,43 @@ where
     }
 }
 
-fn draw_samples(s1: &[f64], s2: &[f64]) {
-    let root = BitMapBackend::new("samples.png", (1280, 780)).into_drawing_area();
-    root.fill(&WHITE).unwrap();
-    let mut chart = ChartBuilder::on(&root)
-        .margin(5)
-        .x_label_area_size(30)
-        .y_label_area_size(30)
-        .build_cartesian_2d(0..SAMPLE_SIZE, -0.1f64..1f64)
-        .unwrap();
+// fn draw_samples(s1: &[f32], s2: &[f32]) {
+//     let root = BitMapBackend::new("samples.png", (1280, 780)).into_drawing_area();
+//     root.fill(&WHITE).unwrap();
+//     let mut chart = ChartBuilder::on(&root)
+//         .margin(5)
+//         .x_label_area_size(30)
+//         .y_label_area_size(30)
+//         .build_cartesian_2d(0..SAMPLE_SIZE, -0.1f32..1f32)
+//         .unwrap();
 
-    chart.configure_mesh().draw().unwrap();
+//     chart.configure_mesh().draw().unwrap();
 
-    chart
-        .draw_series(LineSeries::new(
-            s1.iter().enumerate().map(|(x, y)| (x, *y)),
-            &RED,
-        ))
-        .unwrap();
-    chart
-        .draw_series(LineSeries::new(
-            s2.iter().enumerate().map(|(x, y)| (x, *y)),
-            &BLUE,
-        ))
-        .unwrap();
+//     chart
+//         .draw_series(LineSeries::new(
+//             s1.iter().enumerate().map(|(x, y)| (x, *y)),
+//             &RED,
+//         ))
+//         .unwrap();
+//     chart
+//         .draw_series(LineSeries::new(
+//             s2.iter().enumerate().map(|(x, y)| (x, *y)),
+//             &BLUE,
+//         ))
+//         .unwrap();
 
-    chart
-        .configure_series_labels()
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
-        .draw()
-        .unwrap();
+//     chart
+//         .configure_series_labels()
+//         .background_style(&WHITE.mix(0.8))
+//         .border_style(&BLACK)
+//         .draw()
+//         .unwrap();
 
-    root.present().unwrap();
-}
+//     root.present().unwrap();
+// }
 
-fn gen_white_fundsp() -> Vec<f64> {
-    let mut c: An<Noise<f64>> = white();
+fn gen_white_fundsp() -> Vec<f32> {
+    let mut c: An<Noise<f32>> = white();
     c.reset(Some(44100.0));
     c.allocate();
 
@@ -408,12 +408,12 @@ fn gen_white_fundsp() -> Vec<f64> {
     samples
 }
 
-fn dct(fs: &mut [f64]) {
+fn dct(fs: &mut [f32]) {
     let now = Instant::now();
     let dct = DctPlanner::new().plan_dct2(fs.len());
     dct.process_dct2(fs);
 
-    let scale: f64 = sqrt(2.0 / SAMPLE_SIZE as f64);
+    let scale: f32 = sqrt(2.0 / SAMPLE_SIZE as f32);
     for f in fs {
         *f = *f * scale;
     }
@@ -422,12 +422,12 @@ fn dct(fs: &mut [f64]) {
     println!("Took {}", now.elapsed().as_millis());
 }
 
-fn idct(fs: &mut [f64]) {
+fn idct(fs: &mut [f32]) {
     let now = Instant::now();
     let idct = DctPlanner::new().plan_dct3(fs.len());
     idct.process_dct3(fs);
 
-    let scale: f64 = sqrt(2.0 / SAMPLE_SIZE as f64);
+    let scale: f32 = sqrt(2.0 / SAMPLE_SIZE as f32);
     for f in fs {
         *f = *f * scale;
     }
@@ -436,18 +436,18 @@ fn idct(fs: &mut [f64]) {
     println!("Took {}", now.elapsed().as_millis());
 }
 
-fn gen_white() -> Vec<f64> {
+fn gen_white() -> Vec<f32> {
     let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
     let mut small_rng = rand::rngs::SmallRng::from_entropy();
-    let mut my_signal: Vec<f64> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
+    let mut my_signal: Vec<f32> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
 
     my_signal
 }
 
-fn gen_white_freqs() -> Vec<f64> {
+fn gen_white_freqs() -> Vec<f32> {
     let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
     let mut small_rng = rand::rngs::SmallRng::from_entropy();
-    let mut my_freqs: Vec<f64> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
+    let mut my_freqs: Vec<f32> = r.sample_iter(small_rng).take(SAMPLE_SIZE).collect();
 
     my_freqs
 }
