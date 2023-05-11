@@ -181,37 +181,39 @@ mod equalizer {
             bounds: Rectangle,
             cursor: Cursor,
         ) -> (event::Status, Option<Message>) {
+            // Change control status if left mouse button is pressed/released.
+            // TODO can we get the current mouse button status in iced? Maybe we would have to add it.
+            match event {
+                Event::Mouse(mouse_event) => match mouse_event {
+                    mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                        *state = ControlStatus::Active;
+                    }
+                    mouse::Event::CursorLeft
+                    | mouse::Event::ButtonReleased(mouse::Button::Left)
+                        if state.is_active() =>
+                    {
+                        *state = ControlStatus::Inactive;
+                        return (event::Status::Ignored, Some(Message::ConfirmWeights));
+                    }
+                    // mouse::Event::CursorLeft
+                    // | mouse::Event::ButtonReleased(mouse::Button::Left)
+                    //     if !state.is_active() =>
+                    // {
+                    //     return (event::Status::Ignored, None);
+                    // }
+                    _ => {}
+                },
+                _ => {}
+            };
+
             let cursor_position = if let Some(position) = cursor.position_in(&bounds) {
                 position
             } else {
-                // Deactivate control status if cursor leaves canvas.
-                if state.is_active() {
-                    *state = ControlStatus::Inactive;
-                    return (event::Status::Ignored, Some(Message::ConfirmWeights));
-                } else {
-                    return (event::Status::Ignored, None);
-                }
+                return (event::Status::Ignored, None);
             };
 
             match event {
                 Event::Mouse(mouse_event) => {
-                    // Change control status if left mouse button is pressed/released.
-                    // TODO can we get the current mouse button status in iced? Maybe we would have to add it.
-                    match mouse_event {
-                        mouse::Event::ButtonPressed(mouse::Button::Left) => {
-                            *state = ControlStatus::Active;
-                        }
-                        mouse::Event::ButtonReleased(mouse::Button::Left) => {
-                            if state.is_active() {
-                                *state = ControlStatus::Inactive;
-                                return (event::Status::Ignored, Some(Message::ConfirmWeights));
-                            } else {
-                                return (event::Status::Ignored, None);
-                            }
-                        }
-                        _ => {}
-                    };
-
                     let message = match mouse_event {
                         mouse::Event::CursorMoved { .. }
                         | mouse::Event::ButtonPressed(mouse::Button::Left)
