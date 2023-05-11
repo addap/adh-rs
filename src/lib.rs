@@ -1,3 +1,5 @@
+pub mod generator;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
