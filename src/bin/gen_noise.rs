@@ -1,4 +1,5 @@
-use adh_rs::generator::*;
+use adh_rs::{generator::gen_weighted_noise, WEIGHTS_NUM};
+use adh_rs::{misc::*, Weights};
 
 const DEBUG_WEIGHTS: [f32; WEIGHTS_NUM] = [
     1.0,
@@ -77,8 +78,8 @@ fn main() {
         "white2" => gen_white_noise_and_play(),
         "white3" => gen_freqs_convert_low(),
         "white4" => gen_freqs_convert_high(),
-        "brown" => gen_weighted_noise(&DEBUG_WEIGHTS2),
-        "brown2" => gen_weighted_noise_no_mirror(&DEBUG_WEIGHTS2),
+        "brown" => gen_weighted_noise(&Weights { v: DEBUG_WEIGHTS2 }),
+        // "brown2" => gen_weighted_noise_no_mirror(&DEBUG_WEIGHTS2),
         "testdct" => test_dct(),
         "testdct2" => test_dct2(),
         _ => println!("Malformed argument"),

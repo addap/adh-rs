@@ -10,8 +10,6 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 use fundsp::hacker::*;
 
-use adh_rs::Config;
-
 #[cfg(debug_assertions)] // required when disable_release is set (default)
 #[global_allocator]
 static A: AllocDisabler = AllocDisabler;

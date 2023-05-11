@@ -1,14 +1,14 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
-use std::fmt::Display;
+use std::thread;
 
-use equalizer::canvas_size;
 use iced::widget::{button, column, text};
 use iced::window::Position;
 use iced::{Alignment, Element, Length, Sandbox, Settings};
 
-const WEIGHTS_NUM: usize = 32;
+use adh_rs::{Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
+use equalizer::canvas_size;
+
 const SEGMENTS_WIDTH: f32 = 10.0;
-const SEGMENTS_WEIGHT_MAX: f32 = 1.0;
 const CANVAS_PADDING: f32 = 20.0;
 const WEIGHTS_PADDING_Y: f32 = 20.0;
 const CANVAS_HEIGHT: f32 = 200.0;
@@ -27,7 +27,7 @@ pub fn main() -> iced::Result {
         screen_size.1 - SCREEN_PADDING - window_size.1 - 50,
     );
 
-    Example::run(Settings {
+    TrayUtility::run(Settings {
         antialiasing: true,
         window: iced::window::Settings {
             size: window_size,
@@ -39,21 +39,9 @@ pub fn main() -> iced::Result {
     })
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Weights {
-    pub v: [f32; WEIGHTS_NUM],
-}
-
-impl Default for Weights {
-    fn default() -> Self {
-        Self {
-            v: [SEGMENTS_WEIGHT_MAX; WEIGHTS_NUM],
-        }
-    }
-}
-
+// This application is meant to be used as a small floating window above the system tray.
 #[derive(Debug, Default)]
-struct Example {
+struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
 }
@@ -65,11 +53,11 @@ enum Message {
     Clear,
 }
 
-impl Sandbox for Example {
+impl Sandbox for TrayUtility {
     type Message = Message;
 
     fn new() -> Self {
-        Example::default()
+        TrayUtility::default()
     }
 
     fn title(&self) -> String {
@@ -84,7 +72,7 @@ impl Sandbox for Example {
             }
             Message::ConfirmWeights => {
                 println!("Sending weights to backend.");
-                adh_rs::generator::gen_weighted_noise_no_mirror(&self.weights.v);
+                adh_rs::generator::gen_weighted_noise(&self.weights);
                 // TODO send weights to backend
             }
             Message::Clear => {
