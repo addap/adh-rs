@@ -1,9 +1,15 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
+use std::sync::mpsc::{self, Sender, TryRecvError};
 use std::thread;
+use std::time::Duration;
 
+use adh_rs::audio_bridge::play_samples;
 use iced::widget::{button, column, text};
-use iced::window::Position;
-use iced::{Alignment, Element, Length, Sandbox, Settings};
+use iced::window::{self, Position};
+use iced::{
+    executor, theme, Alignment, Application, Command, Element, Length, Sandbox, Settings,
+    Subscription,
+};
 
 use adh_rs::{Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
 use equalizer::canvas_size;
@@ -44,6 +50,7 @@ pub fn main() -> iced::Result {
 struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
+    send_close: Option<Sender<()>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,20 +58,24 @@ enum Message {
     SetWeight((usize, f32)),
     ConfirmWeights,
     Clear,
+    ExitApplication,
 }
 
-impl Sandbox for TrayUtility {
+impl Application for TrayUtility {
+    type Executor = executor::Default;
     type Message = Message;
+    type Flags = ();
+    type Theme = theme::Theme;
 
-    fn new() -> Self {
-        TrayUtility::default()
+    fn new(_: ()) -> (Self, Command<Message>) {
+        (TrayUtility::default(), Command::none())
     }
 
     fn title(&self) -> String {
         String::from("Equalizer")
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
             Message::SetWeight((i, weight)) => {
                 self.weights.v.get_mut(i).map(|w| *w = weight);
@@ -72,14 +83,35 @@ impl Sandbox for TrayUtility {
             }
             Message::ConfirmWeights => {
                 println!("Sending weights to backend.");
-                adh_rs::generator::gen_weighted_noise(&self.weights);
-                // TODO send weights to backend
+                if let Some(ref tx) = self.send_close {
+                    tx.send(()).ok();
+                }
+
+                let (tx, rx) = mpsc::channel();
+                self.send_close = Some(tx);
+
+                thread::spawn({
+                    let t_weights = self.weights.clone();
+
+                    move || {
+                        let samples = adh_rs::generator::gen_weighted_noise(&t_weights);
+                        play_samples(rx, samples);
+                    }
+                });
             }
             Message::Clear => {
                 self.equalizer = equalizer::State::default();
                 self.weights = Weights::default();
             }
-        }
+            Message::ExitApplication => {
+                if let Some(ref tx) = self.send_close {
+                    tx.send(()).ok();
+                }
+                return window::close();
+            }
+        };
+
+        Command::none()
     }
 
     fn view(&self) -> Element<Message> {
@@ -91,6 +123,19 @@ impl Sandbox for TrayUtility {
         .spacing(CANVAS_PADDING)
         .align_items(Alignment::Center)
         .into()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        // Subscription::batch([
+        // subscribe to keyboard events
+        iced_native::subscription::events_with(|event, status| match (status, event) {
+            /* event when closing the window e.g. mod+Shift+q in i3 */
+            (_, iced_native::Event::Window(iced_native::window::Event::CloseRequested)) => {
+                Some(Message::ExitApplication)
+            }
+            (_, _) => None,
+        })
+        // ])
     }
 }
 

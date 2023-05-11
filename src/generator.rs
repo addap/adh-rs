@@ -39,7 +39,7 @@ pub fn freq_domain_bin2(i: usize) -> f32 {
 }
 
 // Generate noise with weighted frequency bands according to `weights`.
-pub fn gen_weighted_noise(weights: &Weights) {
+pub fn gen_weighted_noise(weights: &Weights) -> Vec<f32> {
     let mut freqs = gen_white_freqs();
 
     for i in 0..CHUNK_SAMPLES {
@@ -51,7 +51,7 @@ pub fn gen_weighted_noise(weights: &Weights) {
 
     idct(&mut freqs);
 
-    play_samples(freqs);
+    freqs
 }
 
 // Inverse discrete cosine transform to transform frequencies back into audio waves.

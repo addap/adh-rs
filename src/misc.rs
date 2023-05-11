@@ -2,6 +2,7 @@ use fundsp::prelude::*;
 use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
 use std::f32::consts::PI;
+use std::sync::mpsc;
 
 use crate::audio_bridge::play_samples;
 use crate::generator::{gen_white_freqs, idct, CHUNK_SAMPLES};
@@ -76,7 +77,8 @@ pub fn gen_freqs_convert() {
     // println!("{:?}", samples);
 
     // draw_samples(&samples, &samples);
-    play_samples(samples);
+    let (tx, rx) = mpsc::channel();
+    play_samples(rx, samples);
 }
 
 pub fn gen_freqs_convert_low() {
@@ -91,7 +93,8 @@ pub fn gen_freqs_convert_low() {
     // println!("{:?}", samples);
 
     // draw_samples(&samples, &samples);
-    play_samples(samples);
+    let (tx, rx) = mpsc::channel();
+    play_samples(rx, samples);
 }
 
 pub fn gen_freqs_convert_high() {
@@ -106,7 +109,8 @@ pub fn gen_freqs_convert_high() {
     // println!("{:?}", samples);
 
     // draw_samples(&samples, &samples);
-    play_samples(samples);
+    let (tx, rx) = mpsc::channel();
+    play_samples(rx, samples);
 }
 
 pub fn gen_white_noise_and_play() {
@@ -122,7 +126,8 @@ pub fn gen_white_noise_and_play() {
     // normalize output
 
     // draw_samples(&samples, &samples_copy);
-    play_samples(samples_copy);
+    let (tx, rx) = mpsc::channel();
+    play_samples(rx, samples_copy);
 }
 
 // fn draw_samples(s1: &[f32], s2: &[f32]) {

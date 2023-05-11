@@ -36,6 +36,7 @@ dependencies = [
  "cpal",
  "fundsp",
  "iced",
+ "iced_native",
  "rand",
  "rustdct",
  "serde",

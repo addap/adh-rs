@@ -1,3 +1,6 @@
+use std::sync::mpsc;
+
+use adh_rs::audio_bridge::play_samples;
 use adh_rs::{generator::gen_weighted_noise, WEIGHTS_NUM};
 use adh_rs::{misc::*, Weights};
 
@@ -78,7 +81,11 @@ fn main() {
         "white2" => gen_white_noise_and_play(),
         "white3" => gen_freqs_convert_low(),
         "white4" => gen_freqs_convert_high(),
-        "brown" => gen_weighted_noise(&Weights { v: DEBUG_WEIGHTS2 }),
+        "brown" => {
+            let samples = gen_weighted_noise(&Weights { v: DEBUG_WEIGHTS2 });
+            let (tx, rx) = mpsc::channel();
+            play_samples(rx, samples);
+        }
         // "brown2" => gen_weighted_noise_no_mirror(&DEBUG_WEIGHTS2),
         "testdct" => test_dct(),
         "testdct2" => test_dct2(),

@@ -1,7 +1,11 @@
+use std::sync::mpsc::{Receiver, TryRecvError};
+use std::thread;
+use std::time::Duration;
+
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 
-pub fn play_samples(s: Vec<f32>) {
+pub fn play_samples(rx: Receiver<()>, s: Vec<f32>) {
     let host = cpal::default_host();
 
     let device = host
@@ -10,14 +14,15 @@ pub fn play_samples(s: Vec<f32>) {
     let config = device.default_output_config().unwrap();
 
     match config.sample_format() {
-        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), s).unwrap(),
-        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), s).unwrap(),
-        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), s).unwrap(),
+        cpal::SampleFormat::F32 => run::<f32>(rx, &device, &config.into(), s).unwrap(),
+        cpal::SampleFormat::I16 => run::<i16>(rx, &device, &config.into(), s).unwrap(),
+        cpal::SampleFormat::U16 => run::<u16>(rx, &device, &config.into(), s).unwrap(),
         _ => panic!("Unsupported format"),
     }
 }
 
 fn run<T>(
+    rx: Receiver<()>,
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     s: Vec<f32>,
@@ -53,10 +58,12 @@ where
     stream.play()?;
 
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(50000));
+        match rx.try_recv() {
+            Ok(()) | Err(TryRecvError::Disconnected) => return Ok(()),
+            _ => {}
+        };
+        thread::sleep(Duration::from_secs(1));
     }
-
-    Ok(())
 }
 
 fn write_data<T>(output: &mut [T], channels: usize, next_sample: &mut dyn FnMut() -> (f32, f32))
