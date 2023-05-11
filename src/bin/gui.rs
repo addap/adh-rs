@@ -1,42 +1,67 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
+use std::fmt::Display;
+
+use equalizer::canvas_size;
 use iced::widget::{button, column, text};
 use iced::window::Position;
 use iced::{Alignment, Element, Length, Sandbox, Settings};
 
 const WEIGHTS_NUM: usize = 32;
-const segments_width: f32 = 10.0;
-const segments_weight_max: f32 = 100.0;
+const SEGMENTS_WIDTH: f32 = 10.0;
+const SEGMENTS_WEIGHT_MAX: f32 = 1.0;
+const CANVAS_PADDING: f32 = 20.0;
+const WEIGHTS_PADDING_Y: f32 = 20.0;
+const CANVAS_HEIGHT: f32 = 200.0;
+const SCREEN_PADDING: u32 = 20;
 
 pub fn main() -> iced::Result {
+    let (width, height) = canvas_size();
+    let window_size = (
+        (width + 2.0 * CANVAS_PADDING) as u32,
+        (height + 2.0 * CANVAS_PADDING) as u32,
+    );
+    let screen_size = (1920, 1080);
+    let window_position = (
+        screen_size.0 - SCREEN_PADDING - window_size.0,
+        // TODO calculation does not work as expected
+        screen_size.1 - SCREEN_PADDING - window_size.1 - 50,
+    );
+
     Example::run(Settings {
         antialiasing: true,
         window: iced::window::Settings {
-            size: (380, 200),
-            // max_size: Some((250, 150)),
-            position: Position::Specific(1600, 800),
+            size: window_size,
+            max_size: Some(window_size),
+            position: Position::Specific(window_position.0 as i32, window_position.1 as i32),
             ..iced::window::Settings::default()
         },
         ..Settings::default()
     })
 }
 
-struct Example {
-    equalizer: equalizer::State,
-    weights: [f32; WEIGHTS_NUM],
+#[derive(Debug, Clone, Copy)]
+struct Weights {
+    pub v: [f32; WEIGHTS_NUM],
 }
 
-impl Default for Example {
+impl Default for Weights {
     fn default() -> Self {
         Self {
-            equalizer: Default::default(),
-            weights: [segments_weight_max; WEIGHTS_NUM],
+            v: [SEGMENTS_WEIGHT_MAX; WEIGHTS_NUM],
         }
     }
+}
+
+#[derive(Debug, Default)]
+struct Example {
+    equalizer: equalizer::State,
+    weights: Weights,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
     SetWeight((usize, f32)),
+    ConfirmWeights,
     Clear,
 }
 
@@ -53,24 +78,29 @@ impl Sandbox for Example {
 
     fn update(&mut self, message: Message) {
         match message {
-            Message::SetWeight((i, new_weight)) => {
-                self.weights.get_mut(i).map(|weight| *weight = new_weight);
+            Message::SetWeight((i, weight)) => {
+                self.weights.v.get_mut(i).map(|w| *w = weight);
                 self.equalizer.request_redraw();
+            }
+            Message::ConfirmWeights => {
+                println!("Sending weights to backend.");
+                adh_rs::generator::gen_weighted_noise_no_mirror(&self.weights.v);
+                // TODO send weights to backend
             }
             Message::Clear => {
                 self.equalizer = equalizer::State::default();
-                self.weights = [segments_weight_max; WEIGHTS_NUM];
+                self.weights = Weights::default();
             }
         }
     }
 
     fn view(&self) -> Element<Message> {
         column![
-            self.equalizer.view(&self.weights).map(Message::SetWeight),
+            self.equalizer.view(&self.weights),
             // button("Clear").padding(8).on_press(Message::Clear),
         ]
-        .padding(20)
-        .spacing(20)
+        .padding(CANVAS_PADDING)
+        .spacing(CANVAS_PADDING)
         .align_items(Alignment::Center)
         .into()
     }
@@ -84,21 +114,53 @@ mod equalizer {
     use iced::{mouse, Color, Size};
     use iced::{Element, Length, Point, Rectangle, Theme};
 
-    use crate::{segments_width, WEIGHTS_NUM};
+    use crate::{
+        Message, Weights, CANVAS_HEIGHT, SEGMENTS_WEIGHT_MAX, SEGMENTS_WIDTH, WEIGHTS_NUM,
+        WEIGHTS_PADDING_Y,
+    };
 
-    #[derive(Default)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum ControlStatus {
+        Active,
+        Inactive,
+    }
+
+    impl ControlStatus {
+        fn is_active(self) -> bool {
+            match self {
+                ControlStatus::Active => true,
+                ControlStatus::Inactive => false,
+            }
+        }
+    }
+
+    impl Default for ControlStatus {
+        fn default() -> Self {
+            Self::Inactive
+        }
+    }
+
+    #[derive(Debug, Default)]
     pub struct State {
         cache: canvas::Cache,
     }
 
+    pub fn canvas_size() -> (f32, f32) {
+        let width = WEIGHTS_NUM as f32 * SEGMENTS_WIDTH;
+        let height = CANVAS_HEIGHT + 2.0 * WEIGHTS_PADDING_Y;
+        (width, height)
+    }
+
     impl State {
-        pub fn view<'a>(&'a self, weights: &'a [f32]) -> Element<'a, (usize, f32)> {
+        pub(super) fn view<'a>(&'a self, weights: &'a Weights) -> Element<'a, Message> {
+            let (width, height) = canvas_size();
+
             Canvas::new(Equalizer {
                 state: self,
                 weights,
             })
-            .width(Length::Fixed(WEIGHTS_NUM as f32 * segments_width))
-            .height(Length::Fixed(150.0))
+            .width(Length::Fixed(width))
+            .height(Length::Fixed(height))
             .into()
         }
 
@@ -107,13 +169,22 @@ mod equalizer {
         }
     }
 
+    #[derive(Debug)]
     struct Equalizer<'a> {
         state: &'a State,
-        weights: &'a [f32],
+        weights: &'a Weights,
     }
 
-    impl<'a> canvas::Program<(usize, f32)> for Equalizer<'a> {
-        type State = ();
+    fn weight_to_ypos(weight: f32) -> f32 {
+        CANVAS_HEIGHT + WEIGHTS_PADDING_Y - (weight * CANVAS_HEIGHT)
+    }
+
+    fn ypos_to_weight(y: f32) -> f32 {
+        ((CANVAS_HEIGHT + WEIGHTS_PADDING_Y - y) / CANVAS_HEIGHT).clamp(0.0, SEGMENTS_WEIGHT_MAX)
+    }
+
+    impl<'a> canvas::Program<Message> for Equalizer<'a> {
+        type State = ControlStatus;
 
         fn update(
             &self,
@@ -121,29 +192,53 @@ mod equalizer {
             event: Event,
             bounds: Rectangle,
             cursor: Cursor,
-        ) -> (event::Status, Option<(usize, f32)>) {
+        ) -> (event::Status, Option<Message>) {
             let cursor_position = if let Some(position) = cursor.position_in(&bounds) {
                 position
             } else {
-                return (event::Status::Ignored, None);
+                // Deactivate control status if cursor leaves canvas.
+                if state.is_active() {
+                    *state = ControlStatus::Inactive;
+                    return (event::Status::Ignored, Some(Message::ConfirmWeights));
+                } else {
+                    return (event::Status::Ignored, None);
+                }
             };
 
             match event {
                 Event::Mouse(mouse_event) => {
+                    // Change control status if left mouse button is pressed/released.
+                    // TODO can we get the current mouse button status in iced? Maybe we would have to add it.
+                    match mouse_event {
+                        mouse::Event::ButtonPressed(mouse::Button::Left) => {
+                            *state = ControlStatus::Active;
+                        }
+                        mouse::Event::ButtonReleased(mouse::Button::Left) => {
+                            if state.is_active() {
+                                *state = ControlStatus::Inactive;
+                                return (event::Status::Ignored, Some(Message::ConfirmWeights));
+                            } else {
+                                return (event::Status::Ignored, None);
+                            }
+                        }
+                        _ => {}
+                    };
+
                     let message = match mouse_event {
-                        mouse::Event::CursorMoved { .. } => {
-                            // let segment = clamp(Math.floor(x / segments_width), 0, segments_num - 1);
-                            // let y2 = clamp(y, 10, segments_weight_max + 10);
+                        mouse::Event::CursorMoved { .. }
+                        | mouse::Event::ButtonPressed(mouse::Button::Left)
+                            if state.is_active() =>
+                        {
+                            // Calculate the segment we are in based on x position of cursor.
+                            let segment = (cursor_position.x / SEGMENTS_WIDTH)
+                                .floor()
+                                .clamp(0.0, 31.0)
+                                as usize;
+                            let weight = ypos_to_weight(cursor_position.y);
 
-                            let p = cursor_position;
-                            // segments[segment] = y2;
-                            let segment = (p.x / segments_width).floor().clamp(0.0, 31.0) as usize;
-                            let y = p.y.clamp(10.0, 110.0);
-                            let weight = 110.0 - y;
-                            let r = Some((segment, weight));
-                            println!("{:?}", r);
-
-                            r
+                            let r = Message::SetWeight((segment, weight));
+                            // println!("{}", r);
+                            Some(r)
                         }
                         _ => None,
                     };
@@ -156,26 +251,17 @@ mod equalizer {
 
         fn draw(
             &self,
-            state: &Self::State,
+            _state: &Self::State,
             _theme: &Theme,
             bounds: Rectangle,
-            cursor: Cursor,
+            _cursor: Cursor,
         ) -> Vec<Geometry> {
             let content = self.state.cache.draw(bounds.size(), |frame: &mut Frame| {
-                // let gradient = ctx.createLinearGradient(0, 110, c.width, 120);
-                // gradient.addColorStop(0, "maroon");
-                // gradient.addColorStop(0.1, "red");
-                // gradient.addColorStop(0.3, "yellow");
-                // gradient.addColorStop(0.5, "green");
-                // gradient.addColorStop(0.7, "aqua");
-                // gradient.addColorStop(0.9, "blue");
-                // gradient.addColorStop(1, "purple");
+                let (width, height) = canvas_size();
+
                 let gradient = Gradient::linear(gradient::Position::Relative {
                     top_left: Point { x: 0.0, y: 0.0 },
-                    size: Size {
-                        width: segments_width * WEIGHTS_NUM as f32,
-                        height: 120.0,
-                    },
+                    size: Size::new(width, height),
                     start: gradient::Location::Left,
                     end: gradient::Location::Right,
                 })
@@ -189,27 +275,58 @@ mod equalizer {
                 .build()
                 .unwrap();
 
-                for (i, w) in self.weights.iter().enumerate() {
+                for (i, w) in self.weights.v.iter().enumerate() {
+                    // Scale weight back into y position on canvas.
+                    let x = i as f32 * SEGMENTS_WIDTH;
+                    let y = weight_to_ypos(*w);
+                    const GRADIENT_PADDING: f32 = 5.0;
+                    const THUMB_SIZE: f32 = 3.0;
+
                     frame.fill_rectangle(
-                        Point {
-                            x: i as f32 * segments_width,
-                            y: 110.0 - *w,
-                        },
-                        Size::new(segments_width, *w),
+                        Point { x, y: y },
+                        Size::new(SEGMENTS_WIDTH, height - WEIGHTS_PADDING_Y - y),
                         gradient.clone(),
                     );
 
                     frame.fill_rectangle(
                         Point {
-                            x: i as f32 * segments_width,
-                            y: 110.0 - *w,
+                            x,
+                            y: y - GRADIENT_PADDING,
                         },
-                        Size::new(segments_width, 5.0),
+                        Size::new(SEGMENTS_WIDTH, THUMB_SIZE),
                         Fill::default(),
-                    )
-                }
-                // Curve::draw_all(self.curves, frame);
+                    );
 
+                    frame.stroke(
+                        &Path::line(
+                            Point {
+                                x,
+                                y: y - GRADIENT_PADDING,
+                            },
+                            Point {
+                                x,
+                                y: height - WEIGHTS_PADDING_Y,
+                            },
+                        ),
+                        Stroke::default(),
+                    );
+
+                    frame.stroke(
+                        &Path::line(
+                            Point {
+                                x: x + SEGMENTS_WIDTH,
+                                y: y - GRADIENT_PADDING,
+                            },
+                            Point {
+                                x: x + SEGMENTS_WIDTH,
+                                y: height - WEIGHTS_PADDING_Y,
+                            },
+                        ),
+                        Stroke::default(),
+                    );
+                }
+
+                // Draw a line around the canvas.
                 frame.stroke(
                     &Path::rectangle(Point::ORIGIN, frame.size()),
                     Stroke::default().with_width(2.0),
@@ -230,185 +347,6 @@ mod equalizer {
             } else {
                 mouse::Interaction::default()
             }
-        }
-    }
-}
-
-mod bezier {
-
-    use iced::mouse;
-    use iced::widget::canvas::event::{self, Event};
-    use iced::widget::canvas::{self, Canvas, Cursor, Frame, Geometry, Path, Stroke};
-    use iced::{Element, Length, Point, Rectangle, Theme};
-
-    #[derive(Default)]
-    pub struct State {
-        cache: canvas::Cache,
-    }
-
-    impl State {
-        pub fn view<'a>(&'a self, curves: &'a [Curve]) -> Element<'a, Curve> {
-            Canvas::new(Bezier {
-                state: self,
-                curves,
-            })
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
-        }
-
-        pub fn request_redraw(&mut self) {
-            self.cache.clear()
-        }
-    }
-
-    struct Bezier<'a> {
-        state: &'a State,
-        curves: &'a [Curve],
-    }
-
-    impl<'a> canvas::Program<Curve> for Bezier<'a> {
-        type State = Option<Pending>;
-
-        fn update(
-            &self,
-            state: &mut Self::State,
-            event: Event,
-            bounds: Rectangle,
-            cursor: Cursor,
-        ) -> (event::Status, Option<Curve>) {
-            let cursor_position = if let Some(position) = cursor.position_in(&bounds) {
-                position
-            } else {
-                return (event::Status::Ignored, None);
-            };
-
-            match event {
-                Event::Mouse(mouse_event) => {
-                    let message = match mouse_event {
-                        mouse::Event::ButtonPressed(mouse::Button::Left) => match *state {
-                            None => {
-                                *state = Some(Pending::One {
-                                    from: cursor_position,
-                                });
-
-                                None
-                            }
-                            Some(Pending::One { from }) => {
-                                *state = Some(Pending::Two {
-                                    from,
-                                    to: cursor_position,
-                                });
-
-                                None
-                            }
-                            Some(Pending::Two { from, to }) => {
-                                *state = None;
-
-                                Some(Curve {
-                                    from,
-                                    to,
-                                    control: cursor_position,
-                                })
-                            }
-                        },
-                        _ => None,
-                    };
-
-                    (event::Status::Captured, message)
-                }
-                _ => (event::Status::Ignored, None),
-            }
-        }
-
-        fn draw(
-            &self,
-            state: &Self::State,
-            _theme: &Theme,
-            bounds: Rectangle,
-            cursor: Cursor,
-        ) -> Vec<Geometry> {
-            let content = self.state.cache.draw(bounds.size(), |frame: &mut Frame| {
-                Curve::draw_all(self.curves, frame);
-
-                frame.stroke(
-                    &Path::rectangle(Point::ORIGIN, frame.size()),
-                    Stroke::default().with_width(2.0),
-                );
-            });
-
-            if let Some(pending) = state {
-                let pending_curve = pending.draw(bounds, cursor);
-
-                vec![content, pending_curve]
-            } else {
-                vec![content]
-            }
-        }
-
-        fn mouse_interaction(
-            &self,
-            _state: &Self::State,
-            bounds: Rectangle,
-            cursor: Cursor,
-        ) -> mouse::Interaction {
-            if cursor.is_over(&bounds) {
-                mouse::Interaction::Crosshair
-            } else {
-                mouse::Interaction::default()
-            }
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct Curve {
-        from: Point,
-        to: Point,
-        control: Point,
-    }
-
-    impl Curve {
-        fn draw_all(curves: &[Curve], frame: &mut Frame) {
-            let curves = Path::new(|p| {
-                for curve in curves {
-                    p.move_to(curve.from);
-                    p.quadratic_curve_to(curve.control, curve.to);
-                }
-            });
-
-            frame.stroke(&curves, Stroke::default().with_width(2.0));
-        }
-    }
-
-    #[derive(Debug, Clone, Copy)]
-    enum Pending {
-        One { from: Point },
-        Two { from: Point, to: Point },
-    }
-
-    impl Pending {
-        fn draw(&self, bounds: Rectangle, cursor: Cursor) -> Geometry {
-            let mut frame = Frame::new(bounds.size());
-
-            if let Some(cursor_position) = cursor.position_in(&bounds) {
-                match *self {
-                    Pending::One { from } => {
-                        let line = Path::line(from, cursor_position);
-                        frame.stroke(&line, Stroke::default().with_width(2.0));
-                    }
-                    Pending::Two { from, to } => {
-                        let curve = Curve {
-                            from,
-                            to,
-                            control: cursor_position,
-                        };
-
-                        Curve::draw_all(&[curve], &mut frame);
-                    }
-                };
-            }
-
-            frame.into_geometry()
         }
     }
 }
