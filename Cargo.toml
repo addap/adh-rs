@@ -9,6 +9,8 @@ edition = "2021"
 anyhow = "1.0.71"
 assert_no_alloc = "1.1.2"
 cpal = "0.15.2"
+daemonize = "0.5.0"
+fork = "0.1.21"
 fundsp = "0.13.0"
 #iced_native = "0.10.3"
 #iced = { version = "0.9.0", features = [ "canvas" ] }
@@ -19,10 +21,12 @@ serde_json = "1.0.96"
 #winit = "0.28.5"
 
 [dependencies.iced]
+#path = "../iced"
 git = "https://github.com/addap/iced.git"
 features = [ "canvas" ]
 
 [dependencies.iced_native]
+#path = "../iced/native"
 git = "https://github.com/addap/iced.git"
 
 #[dependencies.plotters]
