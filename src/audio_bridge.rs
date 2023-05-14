@@ -1,9 +1,92 @@
+//! Audio Bridge module
+//!
+//! This module interacts with the host's audio system to play the generated samples.
+//!
+//! Design:
+//! We probably want some struct to hold the samples and the stream
+//! with methods to start/stop the playback. Audio is playing as long as the stream
+//! object exists, so we want to keep it around. But the current design with a loop
+//! in the play method is not nice.
+//! Also, we want to blend between our sample chunks.
+//! We could have a SampleChunks struct that just holds the different chunks and
+//! implements Iterator that does the blending in the next() methid.
+//! Then we use the iterator analogously to how we use it now.
+use anyhow::anyhow;
+use fundsp::prelude::lerp;
 use std::sync::mpsc::{Receiver, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
+
+use crate::generator::CHUNK_SAMPLES;
+
+type Chunk = Vec<f32>;
+
+struct SampleChunks {
+    chunks: Vec<Chunk>,
+}
+
+struct SampleChunksIter {
+    chunks: Vec<Chunk>,
+    chunk_idx: usize,
+    sample_idx: usize,
+}
+
+impl SampleChunks {
+    fn new(chunks: Vec<Chunk>) -> Result<Self, anyhow::Error> {
+        Ok(Self { chunks })
+    }
+
+    fn into_iter(self) -> Result<SampleChunksIter, anyhow::Error> {
+        SampleChunksIter::new(self.chunks)
+    }
+}
+
+impl SampleChunksIter {
+    fn new(chunks: Vec<Chunk>) -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            chunks,
+            chunk_idx: 0,
+            sample_idx: 0,
+        })
+    }
+}
+
+const BLEND_THRESHOLD: usize = 100;
+
+impl Iterator for SampleChunksIter {
+    type Item = (f32, f32);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.sample_idx < CHUNK_SAMPLES - BLEND_THRESHOLD {
+            // just return next sample from chunk
+            let s = self.chunks[self.chunk_idx][self.sample_idx];
+            self.sample_idx += 1;
+
+            Some((s, s))
+        } else if self.sample_idx < CHUNK_SAMPLES {
+            let weight = CHUNK_SAMPLES - self.sample_idx;
+
+            let s1 = self.chunks[self.chunk_idx][self.sample_idx];
+            let next_chunk_idx = (self.chunk_idx + 1) % self.chunks.len();
+            let next_sample_idx = self.sample_idx + BLEND_THRESHOLD - CHUNK_SAMPLES;
+            let s2 = self.chunks[next_chunk_idx][next_sample_idx];
+
+            let s = lerp(s2, s1, weight as f32 / 100.0);
+
+            if self.sample_idx == CHUNK_SAMPLES - 1 {
+                self.chunk_idx = next_chunk_idx;
+                self.sample_idx = next_sample_idx;
+            }
+
+            Some((s, s))
+        } else {
+            unreachable!()
+        }
+    }
+}
 
 pub fn play_samples(rx: Receiver<()>, s: Vec<f32>) {
     let host = cpal::default_host();
