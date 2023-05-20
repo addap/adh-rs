@@ -21,9 +21,7 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 
-use crate::generator::CHUNK_SAMPLES;
-
-type Chunk = Vec<f32>;
+use crate::generator::{Chunk, CHUNK_SAMPLES};
 
 #[derive(Debug, Clone, Copy)]
 pub enum BlendType {
@@ -64,12 +62,6 @@ impl SampleChunks {
         if chunks.is_empty() {
             return Err(anyhow!("Empty chunks"));
         }
-        for chunk in &chunks {
-            if chunk.len() != CHUNK_SAMPLES {
-                return Err(anyhow!("Malformed chunk length"));
-            }
-        }
-        // Ok(Self { chunk })
         Ok(Self { chunks, blend_type })
     }
 

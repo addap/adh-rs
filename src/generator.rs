@@ -5,7 +5,9 @@ use std::time::{Duration, Instant};
 
 use crate::{audio_bridge::play_samples, Weights, WEIGHTS_NUM};
 
-pub const CHUNK_SAMPLES: usize = 44_100 * 10;
+pub type Chunk = Box<[f32; CHUNK_SAMPLES]>;
+
+pub const CHUNK_SAMPLES: usize = 44_100 * 3;
 const SAMPLE_FREQ: f32 = 44_100.0;
 const MIN_FREQ: f32 = 20.0;
 const MAX_FREQ: f32 = 20_000.0;
@@ -39,8 +41,8 @@ pub fn freq_domain_bin2(i: usize) -> f32 {
 }
 
 // Generate noise with weighted frequency bands according to `weights`.
-pub fn gen_weighted_noise(weights: &Weights) -> Vec<f32> {
-    let mut freqs = gen_white_freqs();
+pub fn gen_weighted_noise(weights: &Weights) -> Chunk {
+    let mut freqs: Chunk = gen_white_freqs();
 
     for i in 0..CHUNK_SAMPLES {
         // get the frequency bin of i in the frequency domain
@@ -49,7 +51,7 @@ pub fn gen_weighted_noise(weights: &Weights) -> Vec<f32> {
         freqs[i] *= weight;
     }
 
-    idct(&mut freqs);
+    idct(freqs.as_mut_slice());
 
     freqs
 }
@@ -71,10 +73,11 @@ pub fn idct(fs: &mut [f32]) {
 }
 
 // White noise frequencies are sampled uniformly random from -1..=1.
-pub fn gen_white_freqs() -> Vec<f32> {
+pub fn gen_white_freqs() -> Chunk {
     let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
     let small_rng = rand::rngs::SmallRng::from_entropy();
     let my_freqs: Vec<f32> = r.sample_iter(small_rng).take(CHUNK_SAMPLES).collect();
 
-    my_freqs
+    let freqs = Box::into_raw(my_freqs.into_boxed_slice()) as *mut [f32; CHUNK_SAMPLES];
+    unsafe { Box::from_raw(freqs) }
 }
