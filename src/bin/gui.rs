@@ -3,7 +3,7 @@ use std::sync::mpsc::{self, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use adh_rs::audio_bridge::play_samples;
+use adh_rs::audio_bridge::{play, play_samples, BlendType, SampleChunks};
 use iced::widget::{button, column, text};
 use iced::window::{self, Position};
 use iced::{
@@ -94,8 +94,21 @@ impl Application for TrayUtility {
                     let t_weights = self.weights.clone();
 
                     move || {
-                        let samples = adh_rs::generator::gen_weighted_noise(&t_weights);
-                        play_samples(rx, samples);
+                        let samples1 = adh_rs::generator::gen_weighted_noise(&t_weights);
+                        let samples2 = adh_rs::generator::gen_weighted_noise(&t_weights);
+                        // let chunks = SampleChunks::new(samples1).unwrap();
+                        let chunks =
+                            SampleChunks::new(vec![samples1, samples2], BlendType::Sigmoid)
+                                .unwrap();
+                        let audio_stream = play(chunks);
+
+                        loop {
+                            match rx.try_recv() {
+                                Ok(()) | Err(TryRecvError::Disconnected) => return,
+                                _ => {}
+                            };
+                            thread::sleep(Duration::from_secs(1));
+                        }
                     }
                 });
             }
