@@ -1,116 +1,15 @@
-use anyhow::anyhow;
 use fundsp::prelude::{lerp, sqrt};
 use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
-use std::{
-    ops::{Deref, DerefMut},
-    sync::Arc,
+
+use crate::{
+    chunk::{PlayableChunk, CHUNK_SAMPLES},
+    Weights, WEIGHTS_NUM,
 };
 
-use crate::{Weights, WEIGHTS_NUM};
-
-pub const CHUNK_SAMPLES: usize = 44_100 * 60;
 const SAMPLE_FREQ: f32 = 44_100.0;
 const MIN_FREQ: f32 = 20.0;
 const MAX_FREQ: f32 = 20_000.0;
-
-pub type Samples = [f32; CHUNK_SAMPLES];
-
-#[derive(Debug, Clone)]
-pub struct PlayableChunk {
-    data: Arc<Samples>,
-}
-
-impl PlayableChunk {
-    fn new(data: Vec<f32>) -> Result<Self, anyhow::Error> {
-        if data.len() != CHUNK_SAMPLES {
-            return Err(anyhow!("Length mismatch"));
-        }
-        // let ptr = Box::into_raw(data.into_boxed_slice()) as *mut [f32; CHUNK_SAMPLES];
-        // let data = unsafe { Box::from_raw(ptr) };
-        // Ok(Self { data })
-        let arc: Arc<[f32]> = Arc::from(data);
-        let ptr = Arc::into_raw(arc) as *mut [f32; CHUNK_SAMPLES];
-        let data = unsafe { Arc::from_raw(ptr) };
-        Ok(Self { data })
-    }
-
-    pub fn get(&self, idx: usize) -> f32 {
-        *self.data.get(idx).unwrap()
-    }
-}
-
-impl IntoIterator for PlayableChunk {
-    type Item = f32;
-
-    type IntoIter = PlayableChunkIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        PlayableChunkIter {
-            data: self.data,
-            fwd_idx: 0,
-            bwd_idx: CHUNK_SAMPLES,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PlayableChunkIter {
-    data: Arc<Samples>,
-    fwd_idx: usize,
-    bwd_idx: usize,
-}
-
-impl Iterator for PlayableChunkIter {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.fwd_idx < self.bwd_idx {
-            let res = self.data[self.fwd_idx];
-            self.fwd_idx += 1;
-            Some(res)
-        } else {
-            None
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = CHUNK_SAMPLES - self.fwd_idx;
-        (remaining, Some(remaining))
-    }
-}
-
-impl DoubleEndedIterator for PlayableChunkIter {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.fwd_idx < self.bwd_idx {
-            self.bwd_idx -= 1;
-            let res = self.data[self.bwd_idx];
-            Some(res)
-        } else {
-            None
-        }
-    }
-}
-
-impl ExactSizeIterator for PlayableChunkIter {}
-
-pub trait MonoSampleIterator: Iterator<Item = f32> + ExactSizeIterator + Send {}
-
-impl MonoSampleIterator for PlayableChunkIter {}
-
-// impl Deref for Chunk {
-//     type Target = Samples;
-
-//     fn deref(&self) -> &Self::Target {
-//         self.data.deref()
-//     }
-// }
-
-// impl DerefMut for Chunk {
-//     fn deref_mut(&mut self) -> &mut Self::Target {
-//         self.data.deref_mut()
-//     }
-// }
 
 // For a frequency in 0..SAMPLE_FREQ/2, compute a weight.
 // The weight is the linear interpolation between the two defined weights in `weights`.

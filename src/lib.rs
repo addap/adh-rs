@@ -1,4 +1,5 @@
 pub mod audio_bridge;
+pub mod chunk;
 pub mod generator;
 pub mod misc;
 
