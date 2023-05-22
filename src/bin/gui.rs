@@ -3,7 +3,7 @@ use std::sync::mpsc::{self, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use adh_rs::audio_bridge::{play, play_samples, BlendType, SampleChunks};
+use adh_rs::audio_bridge::{play, BlendType, SampleChunks};
 use iced::widget::{button, column, text};
 use iced::window::{self, Position};
 use iced::{
@@ -97,9 +97,9 @@ impl Application for TrayUtility {
                         let samples1 = adh_rs::generator::gen_weighted_noise(&t_weights);
                         let samples2 = adh_rs::generator::gen_weighted_noise(&t_weights);
                         // let chunks = SampleChunks::new(samples1).unwrap();
-                        let chunks =
-                            SampleChunks::new(vec![samples1, samples2], BlendType::Sigmoid)
-                                .unwrap();
+                        let chunks = SampleChunks::new(vec![samples1, samples2])
+                            .unwrap()
+                            .with_blend(BlendType::Sigmoid);
                         let audio_stream = play(chunks);
 
                         loop {

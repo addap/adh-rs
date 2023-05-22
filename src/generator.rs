@@ -1,13 +1,12 @@
 use fundsp::prelude::{lerp, sqrt};
 use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
-use std::time::{Duration, Instant};
 
-use crate::{audio_bridge::play_samples, Weights, WEIGHTS_NUM};
+use crate::{Weights, WEIGHTS_NUM};
 
 pub type Chunk = Box<[f32; CHUNK_SAMPLES]>;
 
-pub const CHUNK_SAMPLES: usize = 44_100 * 3;
+pub const CHUNK_SAMPLES: usize = 44_100 * 60;
 const SAMPLE_FREQ: f32 = 44_100.0;
 const MIN_FREQ: f32 = 20.0;
 const MAX_FREQ: f32 = 20_000.0;
@@ -78,6 +77,8 @@ pub fn gen_white_freqs() -> Chunk {
     let small_rng = rand::rngs::SmallRng::from_entropy();
     let my_freqs: Vec<f32> = r.sample_iter(small_rng).take(CHUNK_SAMPLES).collect();
 
+    println!("before unpacking");
     let freqs = Box::into_raw(my_freqs.into_boxed_slice()) as *mut [f32; CHUNK_SAMPLES];
+    println!("after unpacking");
     unsafe { Box::from_raw(freqs) }
 }
