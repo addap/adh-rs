@@ -1,19 +1,17 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
 
+use equalizer::canvas_size;
+use iced::widget::column;
+use iced::window::{self, Position};
+use iced::{executor, theme, Alignment, Application, Command, Element, Settings, Subscription};
+use std::os::unix::net::UnixDatagram;
 use std::sync::mpsc::{self, Sender, TryRecvError};
 use std::thread;
 use std::time::Duration;
 
-use adh_rs::audio_bridge::{play, BlendType, ChunkCollection};
-use iced::widget::{button, column, text};
-use iced::window::{self, Position};
-use iced::{
-    executor, theme, Alignment, Application, Command, Element, Length, Sandbox, Settings,
-    Subscription,
-};
-
-use adh_rs::{Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
-use equalizer::canvas_size;
+use adh_rs::audio_bridge::play;
+use adh_rs::chunk::{BlendType, ChunkCollection};
+use adh_rs::{socket, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
 
 const SEGMENTS_WIDTH: f32 = 10.0;
 const CANVAS_PADDING: f32 = 20.0;
@@ -47,11 +45,25 @@ pub fn main() -> iced::Result {
 }
 
 // This application is meant to be used as a small floating window above the system tray.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
     send_close: Option<Sender<()>>,
+    socket: UnixDatagram,
+}
+
+impl TrayUtility {
+    fn new() -> Self {
+        let socket = socket::get_send().unwrap();
+
+        Self {
+            equalizer: Default::default(),
+            weights: Default::default(),
+            send_close: Default::default(),
+            socket,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -69,7 +81,7 @@ impl Application for TrayUtility {
     type Theme = theme::Theme;
 
     fn new(_: ()) -> (Self, Command<Message>) {
-        (TrayUtility::default(), Command::none())
+        (TrayUtility::new(), Command::none())
     }
 
     fn title(&self) -> String {
@@ -83,35 +95,10 @@ impl Application for TrayUtility {
                 self.equalizer.request_redraw();
             }
             Message::ConfirmWeights => {
-                println!("Sending weights to backend.");
-                if let Some(ref tx) = self.send_close {
-                    tx.send(()).ok();
-                }
-
-                let (tx, rx) = mpsc::channel();
-                self.send_close = Some(tx);
-
-                thread::spawn({
-                    let t_weights = self.weights.clone();
-
-                    move || {
-                        let samples1 = adh_rs::generator::gen_weighted_noise(&t_weights);
-                        let samples2 = adh_rs::generator::gen_weighted_noise(&t_weights);
-                        // let chunks = SampleChunks::new(samples1).unwrap();
-                        let chunks = ChunkCollection::new(vec![samples1, samples2])
-                            .unwrap()
-                            .with_blend(BlendType::Sigmoid);
-                        let audio_stream = play(chunks);
-
-                        loop {
-                            match rx.try_recv() {
-                                Ok(()) | Err(TryRecvError::Disconnected) => return,
-                                _ => {}
-                            };
-                            thread::sleep(Duration::from_secs(1));
-                        }
-                    }
-                });
+                let t_weights = self.weights.clone();
+                self.socket
+                    .send(&serde_json::to_vec(&t_weights).unwrap())
+                    .unwrap();
             }
             Message::Clear => {
                 self.equalizer = equalizer::State::default();

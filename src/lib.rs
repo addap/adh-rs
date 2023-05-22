@@ -1,14 +1,16 @@
+use serde::{Deserialize, Serialize};
+
 pub mod audio_bridge;
 pub mod chunk;
 pub mod generator;
 pub mod misc;
-
-use serde::{Deserialize, Serialize};
+pub mod socket;
 
 pub const WEIGHTS_NUM: usize = 32;
 pub const SEGMENTS_WEIGHT_MAX: f32 = 1.0;
+pub static SOCKET_PATH: &'static str = "/tmp/adh-rs.socket";
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct Weights {
     pub v: [f32; WEIGHTS_NUM],
 }
