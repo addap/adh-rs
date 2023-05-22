@@ -38,10 +38,16 @@ impl PlayableChunk {
     pub fn get(&self, idx: usize) -> f32 {
         *self.data.get(idx).unwrap()
     }
+}
 
-    pub fn into_iter(&self) -> PlayableChunkIter {
+impl IntoIterator for PlayableChunk {
+    type Item = f32;
+
+    type IntoIter = PlayableChunkIter;
+
+    fn into_iter(self) -> Self::IntoIter {
         PlayableChunkIter {
-            data: self.data.clone(),
+            data: self.data,
             fwd_idx: 0,
             bwd_idx: CHUNK_SAMPLES,
         }
