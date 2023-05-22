@@ -11,6 +11,7 @@
 //! We could have a SampleChunks struct that just holds the different chunks and
 //! implements Iterator that does the blending in the next() methid.
 //! Then we use the iterator analogously to how we use it now.
+
 use anyhow::anyhow;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
@@ -19,7 +20,7 @@ use fundsp::prelude::lerp;
 use std::f32;
 use std::time::{Duration, Instant};
 
-use crate::generator::{Chunk, CHUNK_SAMPLES};
+use crate::generator::{MonoSampleIterator, PlayableChunk, CHUNK_SAMPLES};
 
 const BLEND_WINDOW: usize = 1000;
 
@@ -78,29 +79,23 @@ impl Default for Direction {
     }
 }
 
-pub struct SampleChunks {
-    chunks: Vec<Chunk>,
+pub struct ChunkCollection {
+    chunks: Vec<PlayableChunk>,
     smoothing_type: SmoothingType,
 }
 
-struct MirrorChunkIter {
-    chunk: Chunk,
-    sample_idx: usize,
-    direction: Direction,
-}
-
-trait SampleIter: Iterator<Item = (f32, f32)> {}
+type SampleIter = Box<dyn Iterator<Item = (f32, f32)> + Send>;
 
 struct BlendingChunksIter {
-    chunks: Vec<Chunk>,
+    chunk_iter: Box<dyn Iterator<Item = PlayableChunk> + Send>,
+    current_chunk: Box<dyn MonoSampleIterator>,
+    next_chunk: Box<dyn MonoSampleIterator>,
     blend_type: BlendType,
-    chunk_idx: usize,
-    sample_idx: usize,
 }
 
-impl SampleChunks {
+impl ChunkCollection {
     // pub fn new(chunk: Chunk) -> Result<Self, anyhow::Error> {
-    pub fn new(chunks: Vec<Chunk>) -> Result<Self, anyhow::Error> {
+    pub fn new(chunks: Vec<PlayableChunk>) -> Result<Self, anyhow::Error> {
         if chunks.is_empty() {
             return Err(anyhow!("Empty chunks"));
         }
@@ -120,23 +115,18 @@ impl SampleChunks {
         self
     }
 
-    fn into_iter(self) -> Result<Box<dyn Iterator<Item = (f32, f32)> + Send>, anyhow::Error> {
+    fn into_iter(self) -> Result<SampleIter, anyhow::Error> {
         match self.smoothing_type {
             SmoothingType::Mirror => {
                 let first_chunk = self.chunks.into_iter().next().unwrap();
-                Ok(Box::new(MirrorChunkIter::new(first_chunk)))
-                // let first_chunk = &self.chunks[0];
 
-                // println!("before iter");
-                // let iter = first_chunk
-                //     .into_iter()
-                //     .chain(first_chunk.into_iter().rev())
-                //     .map(|f| (f, f))
-                //     .cycle();
-                // println!("after iter");
+                let iter = first_chunk
+                    .into_iter()
+                    .chain(first_chunk.into_iter().rev())
+                    .map(|f| (f, f))
+                    .cycle();
 
-                // Ok(Box::new(iter))
-                // unimplemented!()
+                Ok(Box::new(iter))
             }
             SmoothingType::Blend(blend_type) => {
                 Ok(Box::new(BlendingChunksIter::new(self.chunks, blend_type)?))
@@ -145,57 +135,21 @@ impl SampleChunks {
     }
 }
 
-impl MirrorChunkIter {
-    fn new(chunk: Chunk) -> Self {
-        Self {
-            chunk,
-            sample_idx: 0,
-            direction: Direction::default(),
-        }
-    }
-}
-
 impl BlendingChunksIter {
-    fn new(chunks: Vec<Chunk>, blend_type: BlendType) -> Result<Self, anyhow::Error> {
+    fn new(chunks: Vec<PlayableChunk>, blend_type: BlendType) -> Result<Self, anyhow::Error> {
+        if chunks.is_empty() {
+            return Err(anyhow!("No chunks"));
+        }
+        let mut chunk_iter = chunks.into_iter().cycle();
+        let current_chunk = chunk_iter.next().unwrap();
+        let next_chunk = chunk_iter.next().unwrap();
+
         Ok(Self {
-            chunks,
+            chunk_iter: Box::new(chunk_iter),
             blend_type,
-            chunk_idx: 0,
-            sample_idx: 0,
+            current_chunk: Box::new(current_chunk.into_iter()),
+            next_chunk: Box::new(next_chunk.into_iter()),
         })
-    }
-}
-
-impl Iterator for MirrorChunkIter {
-    type Item = (f32, f32);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // we implement a symmetry around the first and last sample, so no duplication.
-        const LAST_SAMPLE_IDX: usize = CHUNK_SAMPLES - 1;
-        // self.direction = match (self.sample_idx, self.direction) {
-        //     (0, Direction::Backwards) => Direction::Forwards,
-        //     (LAST_SAMPLE_IDX, Direction::Forwards) => Direction::Backwards,
-        //     _ => self.direction,
-        // };
-
-        // self.sample_idx = match self.direction {
-        //     Direction::Forwards => self.sample_idx + 1,
-        //     Direction::Backwards => self.sample_idx - 1,
-        // };
-        self.sample_idx = match (self.sample_idx, self.direction) {
-            (0, Direction::Backwards) => {
-                self.direction = self.direction.change();
-                0
-            }
-            (LAST_SAMPLE_IDX, Direction::Forwards) => {
-                self.direction = self.direction.change();
-                LAST_SAMPLE_IDX
-            }
-            (sample_idx, Direction::Backwards) => sample_idx - 1,
-            (sample_idx, Direction::Forwards) => sample_idx + 1,
-        };
-        let sample = self.chunk.get(self.sample_idx).unwrap();
-        Some((*sample, *sample))
     }
 }
 
@@ -203,35 +157,53 @@ impl Iterator for BlendingChunksIter {
     type Item = (f32, f32);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.sample_idx < CHUNK_SAMPLES - BLEND_WINDOW {
-            // just return next sample from chunk
-            let s = self.chunks[self.chunk_idx][self.sample_idx];
-            self.sample_idx = (self.sample_idx + 1) % CHUNK_SAMPLES;
-
-            Some((s, s))
-        } else if self.sample_idx < CHUNK_SAMPLES {
-            // weight = 0.0 if we are at left side of blending window.
-            // weight = 1 - 1/BLEND_WINDOW if we are at right side of blending window.
-            let weight = 1.0 - (CHUNK_SAMPLES - self.sample_idx) as f32 / BLEND_WINDOW as f32;
-
-            let s1 = self.chunks[self.chunk_idx][self.sample_idx];
-            let next_chunk_idx = (self.chunk_idx + 1) % self.chunks.len();
-            let next_sample_idx = (self.sample_idx + BLEND_WINDOW) % CHUNK_SAMPLES;
-            let s2 = self.chunks[next_chunk_idx][next_sample_idx];
+        if self.current_chunk.len() <= BLEND_WINDOW {
+            let weight = 1.0 - self.current_chunk.len() as f32 / BLEND_WINDOW as f32;
+            let s1 = self.current_chunk.next().unwrap();
+            let s2 = self.next_chunk.next().unwrap();
 
             let s = self.blend_type.blend(s1, s2, weight);
 
-            if self.sample_idx == CHUNK_SAMPLES - 1 {
-                println!("Transferring to next chunk");
-                self.chunk_idx = next_chunk_idx;
-                self.sample_idx = next_sample_idx;
+            if self.current_chunk.len() == 0 {
+                let new_next = Box::new(self.chunk_iter.next().unwrap().into_iter());
+                let old_next = std::mem::replace(&mut self.next_chunk, new_next);
+                self.current_chunk = old_next;
             }
-            self.sample_idx += 1;
 
             Some((s, s))
         } else {
-            unreachable!()
+            let s = self.current_chunk.next().unwrap();
+            Some((s, s))
         }
+        // if self.sample_idx < CHUNK_SAMPLES - BLEND_WINDOW {
+        //     // just return next sample from chunk
+        //     let s = self.chunks[self.chunk_idx].get(self.sample_idx);
+        //     self.sample_idx = (self.sample_idx + 1) % CHUNK_SAMPLES;
+
+        //     Some((s, s))
+        // } else if self.sample_idx < CHUNK_SAMPLES {
+        //     // weight = 0.0 if we are at left side of blending window.
+        //     // weight = 1 - 1/BLEND_WINDOW if we are at right side of blending window.
+        //     let weight = 1.0 - (CHUNK_SAMPLES - self.sample_idx) as f32 / BLEND_WINDOW as f32;
+
+        //     let s1 = self.chunks[self.chunk_idx].get(self.sample_idx);
+        //     let next_chunk_idx = (self.chunk_idx + 1) % self.chunks.len();
+        //     let next_sample_idx = (self.sample_idx + BLEND_WINDOW) % CHUNK_SAMPLES;
+        //     let s2 = self.chunks[next_chunk_idx].get(next_sample_idx);
+
+        //     let s = self.blend_type.blend(s1, s2, weight);
+
+        //     if self.sample_idx == CHUNK_SAMPLES - 1 {
+        //         println!("Transferring to next chunk");
+        //         self.chunk_idx = next_chunk_idx;
+        //         self.sample_idx = next_sample_idx;
+        //     }
+        //     self.sample_idx += 1;
+
+        //     Some((s, s))
+        // } else {
+        //     unreachable!()
+        // }
     }
 }
 
@@ -239,7 +211,7 @@ pub struct AudioStream {
     stream: cpal::Stream,
 }
 
-pub fn play(chunks: SampleChunks) -> AudioStream {
+pub fn play(chunks: ChunkCollection) -> AudioStream {
     let host = cpal::default_host();
 
     let device = host
@@ -258,7 +230,7 @@ pub fn play(chunks: SampleChunks) -> AudioStream {
 fn run2<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    chunks: SampleChunks,
+    chunks: ChunkCollection,
 ) -> Result<AudioStream, anyhow::Error>
 where
     T: SizedSample + FromSample<f32>,
@@ -293,7 +265,7 @@ where
     Ok(AudioStream { stream })
 }
 
-fn write_data2<T>(
+fn write_data2<'a, T>(
     output: &mut [T],
     channels: usize,
     next_sample: &mut impl Iterator<Item = (f32, f32)>,
