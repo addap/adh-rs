@@ -3,7 +3,7 @@ use fundsp::prelude::lerp;
 use std::f32;
 use std::sync::Arc;
 
-pub const CHUNK_SAMPLES: usize = 44_100 * 60;
+pub const CHUNK_SAMPLES: usize = 44_100 * 3;
 const BLEND_WINDOW: usize = 1000;
 
 pub type Samples = [f32; CHUNK_SAMPLES];
@@ -168,7 +168,7 @@ impl ChunkCollection {
                 Ok(Box::new(iter))
             }
             SmoothingType::Blend(blend_type) => Ok(Box::new(BlendingChunksIter::new(
-                self.chunks.into_iter(),
+                self.chunks.into_iter().cycle(),
                 blend_type,
             )?)),
         }
@@ -181,7 +181,7 @@ impl<I: Iterator<Item = J>, J: IntoIterator<IntoIter = K>, K> BlendingChunksIter
         let next_chunk = chunk_iter.next().unwrap();
 
         Ok(Self {
-            chunk_iter: chunk_iter,
+            chunk_iter,
             blend_type,
             current_chunk: current_chunk.into_iter(),
             next_chunk: next_chunk.into_iter(),
