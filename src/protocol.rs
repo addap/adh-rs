@@ -11,8 +11,7 @@ use crate::{Weights, SOCKET_PATH};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Command {
     SetWeights(Weights),
-    Stop,
-    Resume,
+    Toggle,
     Quit,
 }
 

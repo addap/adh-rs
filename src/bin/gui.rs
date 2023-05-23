@@ -5,10 +5,9 @@ use equalizer::canvas_size;
 use iced::widget::column;
 use iced::window::{self, Position};
 use iced::{executor, theme, Alignment, Application, Command, Element, Settings, Subscription};
-use std::os::unix::net::UnixDatagram;
-use std::sync::mpsc::{self, Sender, TryRecvError};
+use iced_native::event::Status;
+use iced_native::keyboard::KeyCode;
 
-use adh_rs::chunk::{BlendType, ChunkCollection};
 use adh_rs::{protocol, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
 
 const SEGMENTS_WIDTH: f32 = 10.0;
@@ -47,7 +46,6 @@ pub fn main() -> iced::Result {
 struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
-    send_close: Option<Sender<()>>,
     protocol: Protocol,
 }
 
@@ -58,7 +56,6 @@ impl TrayUtility {
         Self {
             equalizer: Default::default(),
             weights: Default::default(),
-            send_close: Default::default(),
             protocol,
         }
     }
@@ -70,6 +67,8 @@ enum Message {
     ConfirmWeights,
     Clear,
     ExitApplication,
+    TogglePlay,
+    ExitDaemon,
 }
 
 impl Application for TrayUtility {
@@ -103,10 +102,14 @@ impl Application for TrayUtility {
                 self.weights = Weights::default();
             }
             Message::ExitApplication => {
-                if let Some(ref tx) = self.send_close {
-                    tx.send(()).ok();
-                }
                 return window::close();
+            }
+            Message::ExitDaemon => {
+                self.protocol.send(&protocol::Command::Quit).unwrap();
+                return window::close();
+            }
+            Message::TogglePlay => {
+                self.protocol.send(&protocol::Command::Toggle).unwrap();
             }
         };
 
@@ -132,6 +135,28 @@ impl Application for TrayUtility {
             (_, iced_native::Event::Window(iced_native::window::Event::CloseRequested)) => {
                 Some(Message::ExitApplication)
             }
+            (
+                Status::Ignored,
+                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
+                    key_code: KeyCode::Q,
+                    ..
+                }),
+            ) => Some(Message::ExitDaemon),
+            (
+                Status::Ignored,
+                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
+                    key_code: KeyCode::P,
+                    ..
+                }),
+            ) => Some(Message::TogglePlay),
+            // this one should be last since it captures all keys to filter out the num keys
+            (
+                Status::Ignored,
+                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
+                    key_code,
+                    modifiers,
+                }),
+            ) => None,
             (_, _) => None,
         })
         // ])

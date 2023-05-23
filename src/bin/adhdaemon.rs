@@ -9,6 +9,7 @@ use adh_rs::{
 fn main() -> Result<(), anyhow::Error> {
     let protocol = protocol::Protocol::new_recv()?;
     let mut audio_stream = None;
+    let mut playing = false;
 
     loop {
         let command = protocol.recv().unwrap();
@@ -24,16 +25,18 @@ fn main() -> Result<(), anyhow::Error> {
                     .with_blend(BlendType::Sigmoid);
 
                 let new_audio_stream = play(chunks);
+                playing = true;
                 audio_stream = Some(new_audio_stream);
             }
-            protocol::Command::Stop => {
+            protocol::Command::Toggle => {
                 if let Some(audio_stream) = &audio_stream {
-                    audio_stream.stream.pause().ok();
-                }
-            }
-            protocol::Command::Resume => {
-                if let Some(audio_stream) = &audio_stream {
-                    audio_stream.stream.play().ok();
+                    if playing {
+                        audio_stream.stream.pause().ok();
+                    } else {
+                        audio_stream.stream.play().ok();
+                    }
+                    // only set if successful
+                    playing = !playing;
                 }
             }
             protocol::Command::Quit => return Ok(()),
