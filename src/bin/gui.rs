@@ -1,17 +1,15 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
 
+use adh_rs::protocol::Protocol;
 use equalizer::canvas_size;
 use iced::widget::column;
 use iced::window::{self, Position};
 use iced::{executor, theme, Alignment, Application, Command, Element, Settings, Subscription};
 use std::os::unix::net::UnixDatagram;
 use std::sync::mpsc::{self, Sender, TryRecvError};
-use std::thread;
-use std::time::Duration;
 
-use adh_rs::audio_bridge::play;
 use adh_rs::chunk::{BlendType, ChunkCollection};
-use adh_rs::{socket, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
+use adh_rs::{protocol, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
 
 const SEGMENTS_WIDTH: f32 = 10.0;
 const CANVAS_PADDING: f32 = 20.0;
@@ -50,18 +48,18 @@ struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
     send_close: Option<Sender<()>>,
-    socket: UnixDatagram,
+    protocol: Protocol,
 }
 
 impl TrayUtility {
     fn new() -> Self {
-        let socket = socket::get_send().unwrap();
+        let protocol = protocol::Protocol::new_send().unwrap();
 
         Self {
             equalizer: Default::default(),
             weights: Default::default(),
             send_close: Default::default(),
-            socket,
+            protocol,
         }
     }
 }
@@ -96,8 +94,8 @@ impl Application for TrayUtility {
             }
             Message::ConfirmWeights => {
                 let t_weights = self.weights.clone();
-                self.socket
-                    .send(&serde_json::to_vec(&t_weights).unwrap())
+                self.protocol
+                    .send(&protocol::Command::SetWeights(t_weights))
                     .unwrap();
             }
             Message::Clear => {

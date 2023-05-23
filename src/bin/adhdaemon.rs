@@ -1,27 +1,42 @@
+use cpal::traits::StreamTrait;
+
 use adh_rs::{
     audio_bridge::play,
     chunk::{BlendType, ChunkCollection},
-    socket, Weights,
+    protocol,
 };
 
 fn main() -> Result<(), anyhow::Error> {
-    let socket = socket::get_socket()?;
-    let mut audio_stream;
+    let protocol = protocol::Protocol::new_recv()?;
+    let mut audio_stream = None;
 
     loop {
-        let mut buf = vec![0; 1024];
-        let read_bytes = socket.recv(&mut buf).unwrap();
-        println!("Received Weights.");
+        let command = protocol.recv().unwrap();
+        println!("Received Command.");
 
-        let weights: Weights = serde_json::from_slice(&buf[..read_bytes]).unwrap();
+        match command {
+            protocol::Command::SetWeights(weights) => {
+                let samples1 = adh_rs::generator::gen_weighted_noise(&weights);
+                let samples2 = adh_rs::generator::gen_weighted_noise(&weights);
+                // let chunks = SampleChunks::new(samples1).unwrap();
+                let chunks = ChunkCollection::new(vec![samples1, samples2])
+                    .unwrap()
+                    .with_blend(BlendType::Sigmoid);
 
-        let samples1 = adh_rs::generator::gen_weighted_noise(&weights);
-        let samples2 = adh_rs::generator::gen_weighted_noise(&weights);
-        // let chunks = SampleChunks::new(samples1).unwrap();
-        let chunks = ChunkCollection::new(vec![samples1, samples2])
-            .unwrap()
-            .with_blend(BlendType::Sigmoid);
-
-        audio_stream = play(chunks);
+                let new_audio_stream = play(chunks);
+                audio_stream = Some(new_audio_stream);
+            }
+            protocol::Command::Stop => {
+                if let Some(audio_stream) = &audio_stream {
+                    audio_stream.stream.pause().ok();
+                }
+            }
+            protocol::Command::Resume => {
+                if let Some(audio_stream) = &audio_stream {
+                    audio_stream.stream.play().ok();
+                }
+            }
+            protocol::Command::Quit => return Ok(()),
+        }
     }
 }

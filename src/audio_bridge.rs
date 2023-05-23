@@ -20,7 +20,7 @@ use std::time::Instant;
 use crate::chunk::ChunkCollection;
 
 pub struct AudioStream {
-    stream: cpal::Stream,
+    pub stream: cpal::Stream,
 }
 
 pub fn play(chunks: ChunkCollection) -> AudioStream {

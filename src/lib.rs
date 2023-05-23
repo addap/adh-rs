@@ -4,7 +4,7 @@ pub mod audio_bridge;
 pub mod chunk;
 pub mod generator;
 pub mod misc;
-pub mod socket;
+pub mod protocol;
 
 pub const WEIGHTS_NUM: usize = 32;
 pub const SEGMENTS_WEIGHT_MAX: f32 = 1.0;
