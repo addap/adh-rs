@@ -21,8 +21,8 @@ The daemon has a system-tray icon which can be used to shut down the daemon or s
 - [x] Noise generation using inverse DCT
   - [x] Blending different samples to avoid popping sound
 - [x] GUI for specifying frequency band weights
-  - [ ] Start/stop audio streams
-  - [ ] Saving frequency band weights
+  - [x] Start/stop audio streams
+  - [x] Saving frequency band weights
   - [ ] Straight line algorithm to prevent skipping frequency bands when moving mouse quickly
-- [ ] Daemon to play the noise while in background.
+- [x] Daemon to play the noise while in background.
 - [ ] Systray icon

@@ -35,7 +35,7 @@ fn main() -> Result<(), anyhow::Error> {
                     } else {
                         audio_stream.stream.play().ok();
                     }
-                    // only set if successful
+                    // TODO only set if successful
                     playing = !playing;
                 }
             }

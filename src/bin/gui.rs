@@ -1,6 +1,5 @@
 //! This example showcases an interactive `Canvas` for drawing Bézier curves.
 
-use adh_rs::protocol::Protocol;
 use equalizer::canvas_size;
 use iced::widget::column;
 use iced::window::{self, Position};
@@ -8,7 +7,9 @@ use iced::{executor, theme, Alignment, Application, Command, Element, Settings, 
 use iced_native::event::Status;
 use iced_native::keyboard::KeyCode;
 
-use adh_rs::{protocol, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM};
+use adh_rs::{
+    protocol, protocol::Protocol, slots::Slots, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM,
+};
 
 const SEGMENTS_WIDTH: f32 = 10.0;
 const CANVAS_PADDING: f32 = 20.0;
@@ -47,17 +48,28 @@ struct TrayUtility {
     equalizer: equalizer::State,
     weights: Weights,
     protocol: Protocol,
+    slots: Slots,
 }
 
 impl TrayUtility {
     fn new() -> Self {
-        let protocol = protocol::Protocol::new_send().unwrap();
+        let protocol = Protocol::new_send().unwrap();
+        let slots = Slots::load_from_disk();
+        let start_weights = slots.recall_slot(0);
 
         Self {
             equalizer: Default::default(),
-            weights: Default::default(),
+            weights: start_weights,
             protocol,
+            slots,
         }
+    }
+
+    /// Cleanup and return command to close the window.
+    fn window_close(&mut self) -> Command<Message> {
+        println!("exiting");
+        self.slots.write_to_disk();
+        window::close()
     }
 }
 
@@ -69,6 +81,8 @@ enum Message {
     ExitApplication,
     TogglePlay,
     ExitDaemon,
+    SaveSlot(usize),
+    RecallSlot(usize),
 }
 
 impl Application for TrayUtility {
@@ -92,9 +106,8 @@ impl Application for TrayUtility {
                 self.equalizer.request_redraw();
             }
             Message::ConfirmWeights => {
-                let t_weights = self.weights.clone();
                 self.protocol
-                    .send(&protocol::Command::SetWeights(t_weights))
+                    .send(&protocol::Command::SetWeights(self.weights))
                     .unwrap();
             }
             Message::Clear => {
@@ -102,14 +115,19 @@ impl Application for TrayUtility {
                 self.weights = Weights::default();
             }
             Message::ExitApplication => {
-                return window::close();
+                return self.window_close();
             }
             Message::ExitDaemon => {
                 self.protocol.send(&protocol::Command::Quit).unwrap();
-                return window::close();
+                return self.window_close();
             }
             Message::TogglePlay => {
                 self.protocol.send(&protocol::Command::Toggle).unwrap();
+            }
+            Message::SaveSlot(idx) => self.slots.save_slot(idx, self.weights),
+            Message::RecallSlot(idx) => {
+                self.weights = self.slots.recall_slot(idx);
+                self.equalizer.request_redraw();
             }
         };
 
@@ -131,7 +149,7 @@ impl Application for TrayUtility {
         // Subscription::batch([
         // subscribe to keyboard events
         iced_native::subscription::events_with(|event, status| match (status, event) {
-            /* event when closing the window e.g. mod+Shift+q in i3 */
+            /* TODO apparently this event is not emitted on mod+Shift+q in newer iced versions. Should debug. */
             (_, iced_native::Event::Window(iced_native::window::Event::CloseRequested)) => {
                 Some(Message::ExitApplication)
             }
@@ -139,6 +157,13 @@ impl Application for TrayUtility {
                 Status::Ignored,
                 iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
                     key_code: KeyCode::Q,
+                    ..
+                }),
+            ) => Some(Message::ExitApplication),
+            (
+                Status::Ignored,
+                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
+                    key_code: KeyCode::D,
                     ..
                 }),
             ) => Some(Message::ExitDaemon),
@@ -156,7 +181,29 @@ impl Application for TrayUtility {
                     key_code,
                     modifiers,
                 }),
-            ) => None,
+            ) => {
+                fn key_code_to_num(key_code: KeyCode) -> Option<usize> {
+                    match key_code {
+                        KeyCode::Key1 => Some(1),
+                        KeyCode::Key2 => Some(2),
+                        KeyCode::Key3 => Some(3),
+                        KeyCode::Key4 => Some(4),
+                        KeyCode::Key5 => Some(5),
+                        KeyCode::Key6 => Some(6),
+                        KeyCode::Key7 => Some(7),
+                        KeyCode::Key8 => Some(8),
+                        KeyCode::Key9 => Some(9),
+                        KeyCode::Key0 => Some(0),
+                        _ => None,
+                    }
+                }
+
+                match (key_code_to_num(key_code), modifiers.control()) {
+                    (Some(idx), true) => Some(Message::SaveSlot(idx)),
+                    (Some(idx), false) => Some(Message::RecallSlot(idx)),
+                    _ => None,
+                }
+            }
             (_, _) => None,
         })
         // ])
