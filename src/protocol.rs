@@ -21,6 +21,10 @@ pub struct Protocol {
 }
 
 impl Protocol {
+    pub fn new_raw(sock: UnixDatagram) -> Self {
+        Self { sock }
+    }
+
     pub fn new_recv() -> Result<Self, anyhow::Error> {
         let socket_path = Path::new(SOCKET_PATH);
         if socket_path.exists() {

@@ -1,0 +1,7 @@
+[Socket]
+ListenDatagram = /tmp/adh-rs.socket
+FileDescriptorName = noise
+Service = adhdaemon.service
+
+[Install]
+WantedBy = sockets.target
