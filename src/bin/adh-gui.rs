@@ -1,5 +1,3 @@
-//! This example showcases an interactive `Canvas` for drawing Bézier curves.
-
 use equalizer::canvas_size;
 use iced::widget::column;
 use iced::window::{self, Position};
@@ -122,8 +120,8 @@ impl Application for TrayUtility {
                 return self.window_close();
             }
             Message::ExitDaemon => {
-                self.protocol.send(&protocol::Command::Quit).unwrap();
-                return self.window_close();
+                // self.protocol.send(&protocol::Command::Quit).unwrap();
+                // return self.window_close();
             }
             Message::TogglePlay => {
                 self.protocol.send(&protocol::Command::Toggle).unwrap();
@@ -222,7 +220,7 @@ mod equalizer {
     use iced::{mouse, Color, Size};
     use iced::{Element, Length, Point, Rectangle, Theme};
 
-    use crate::{
+    use super::{
         Message, Weights, CANVAS_HEIGHT, SEGMENTS_WEIGHT_MAX, SEGMENTS_WIDTH, WEIGHTS_NUM,
         WEIGHTS_PADDING_Y,
     };

@@ -6,6 +6,7 @@ pub mod generator;
 pub mod misc;
 pub mod protocol;
 pub mod slots;
+pub mod tray_icon;
 
 pub const WEIGHTS_NUM: usize = 32;
 pub const SEGMENTS_WEIGHT_MAX: f32 = 1.0;

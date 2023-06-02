@@ -12,7 +12,7 @@ use crate::{Weights, SOCKET_PATH};
 pub enum Command {
     SetWeights(Weights),
     Toggle,
-    Quit,
+    // Quit,
 }
 
 #[derive(Debug)]
