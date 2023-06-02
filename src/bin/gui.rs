@@ -6,6 +6,7 @@ use iced::window::{self, Position};
 use iced::{executor, theme, Alignment, Application, Command, Element, Settings, Subscription};
 use iced_native::event::Status;
 use iced_native::keyboard::KeyCode;
+use xdg::{self, BaseDirectories};
 
 use adh_rs::{
     protocol, protocol::Protocol, slots::Slots, Weights, SEGMENTS_WEIGHT_MAX, WEIGHTS_NUM,
@@ -49,12 +50,14 @@ struct TrayUtility {
     weights: Weights,
     protocol: Protocol,
     slots: Slots,
+    xdg: BaseDirectories,
 }
 
 impl TrayUtility {
     fn new() -> Self {
         let protocol = Protocol::new_send().unwrap();
-        let slots = Slots::load_from_disk();
+        let xdg = BaseDirectories::with_prefix("adh-rs").unwrap();
+        let slots = Slots::load_from_disk(&xdg);
         let start_weights = slots.recall_slot(0);
 
         Self {
@@ -62,13 +65,14 @@ impl TrayUtility {
             weights: start_weights,
             protocol,
             slots,
+            xdg,
         }
     }
 
     /// Cleanup and return command to close the window.
     fn window_close(&mut self) -> Command<Message> {
         println!("exiting");
-        self.slots.write_to_disk();
+        self.slots.write_to_disk(&self.xdg);
         window::close()
     }
 }

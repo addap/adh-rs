@@ -4,16 +4,18 @@
 //! Starting the GUI loads the config file from disk.
 //! Exiting the GUI writes if back.
 
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::OpenOptions,
+    fs::File,
     io::{Read, Write},
 };
+use xdg::BaseDirectories;
 
 use crate::Weights;
 
 const SLOTS_NUM: usize = 10;
-const DEFAULT_SLOTS_FILE: &str = "/tmp/slots";
+const SLOTS_FILENAME: &str = "slots.txt";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Slots {
@@ -29,35 +31,30 @@ impl Slots {
         self.slots.get(idx).cloned().unwrap_or_default()
     }
 
-    fn disk_path() -> String {
-        match std::env::var("SLOTS_FILE") {
-            Ok(path) => path,
-            Err(_) => DEFAULT_SLOTS_FILE.to_owned(),
-        }
-    }
-
-    pub fn write_to_disk(&self) {
-        fn inner(slots: &Slots) -> Result<(), anyhow::Error> {
-            let buf = serde_json::to_vec(&slots)?;
-            let path = Slots::disk_path();
-            let mut f = OpenOptions::new().write(true).create(true).open(&path)?;
+    pub fn write_to_disk(&self, xdg_dirs: &BaseDirectories) {
+        let inner = || -> Result<(), anyhow::Error> {
+            let buf = serde_json::to_vec(&self)?;
+            let path = xdg_dirs.place_config_file(SLOTS_FILENAME)?;
+            let mut f = File::create(path)?;
             f.write_all(&buf)?;
             f.flush()?;
             Ok(())
-        }
+        };
 
-        inner(self).unwrap()
+        inner().unwrap()
     }
 
-    pub fn load_from_disk() -> Self {
-        fn inner() -> Result<Slots, anyhow::Error> {
-            let path = Slots::disk_path();
-            let mut f = OpenOptions::new().read(true).open(&path)?;
+    pub fn load_from_disk(xdg_dirs: &BaseDirectories) -> Self {
+        let inner = || -> Result<Slots, anyhow::Error> {
+            let path = xdg_dirs
+                .find_config_file(SLOTS_FILENAME)
+                .ok_or(anyhow!("Slots config file not found."))?;
+            let mut f = File::open(path)?;
             let mut buf = Vec::new();
             f.read_to_end(&mut buf)?;
             let slots = serde_json::from_slice(&buf)?;
             Ok(slots)
-        }
+        };
 
         match inner() {
             Ok(s) => s,
