@@ -26,9 +26,6 @@ lazy_static! {
     };
 }
 
-#[cfg(not(debug_assertions))]
-const GUI_PROGRAM_NAME: &str = "adh-gui";
-
 fn get_protocol() -> Protocol {
     if let Some(arg) = std::env::args().nth(1) {
         if &arg == "--daemon" {
