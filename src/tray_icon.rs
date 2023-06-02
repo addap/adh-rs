@@ -1,6 +1,7 @@
-use std::path::Path;
+use lazy_static::lazy_static;
+use std::env;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::{env, thread};
 
 use gtk::prelude::*;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
@@ -10,14 +11,26 @@ pub enum TrayCommand {
     RunGUI,
 }
 
+lazy_static! {
+    static ref ICON_PATH: PathBuf = {
+        if cfg!(debug_assertions) {
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("resources")
+                .to_owned()
+        } else {
+            Path::new("/usr/share/adh-rs/").join("resources").to_owned()
+        }
+    };
+}
+
 pub fn main(tx: mpsc::Sender<TrayCommand>) {
     gtk::init().unwrap();
 
     let mut indicator = AppIndicator::new("Adh-rs system tray icon", "");
     indicator.set_status(AppIndicatorStatus::Active);
-    let icon_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources");
+    let icon_path = ICON_PATH.as_path();
     indicator.set_icon_theme_path(icon_path.to_str().unwrap());
-    indicator.set_icon_full("Sound-Wave-Headphones", "icon");
+    indicator.set_icon_full("tray-icon", "icon");
     let mut m = gtk::Menu::new();
 
     let quit_entry = gtk::MenuItem::with_label("Quit");

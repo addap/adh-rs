@@ -26,4 +26,4 @@ The daemon has a system-tray icon which can be used to shut down the daemon or s
   - [ ] Straight line algorithm to prevent skipping frequency bands when moving mouse quickly
 - [x] Daemon to play the noise while in background.
   - [x] Socket activation so that when starting the GUI the daemon is started lazily.
-- [ ] Systray icon
+- [x] Systray icon
