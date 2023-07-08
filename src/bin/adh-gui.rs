@@ -79,13 +79,6 @@ impl TrayUtility {
         self.slots.write_to_disk(&self.xdg);
         window::close()
     }
-
-    /// Send the weights to the daemon.
-    fn send_weights(&self) {
-        self.protocol
-            .send(&protocol::Command::SetWeights(self.weights))
-            .unwrap();
-    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -173,12 +166,13 @@ impl Application for TrayUtility {
                 // Don't need to do anything because self.last_segment_index is already reset.
             }
             Message::ConfirmWeights => {
-                self.send_weights();
+                self.protocol
+                    .send(&protocol::Command::SetWeights(self.weights))
+                    .unwrap();
             }
             Message::Clear => {
                 self.weights = Weights::default();
                 self.equalizer = equalizer::State::default();
-                self.send_weights();
             }
             Message::ExitApplication => {
                 return self.window_close();
@@ -194,7 +188,6 @@ impl Application for TrayUtility {
             Message::RecallSlot(idx) => {
                 self.weights = self.slots.recall_slot(idx);
                 self.equalizer.request_redraw();
-                self.send_weights();
             }
         };
 
