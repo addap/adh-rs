@@ -148,8 +148,13 @@ impl Application for TrayUtility {
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        // Subscription::batch([
         // subscribe to keyboard events
+        // 'Q': quit GUI
+        // 'D': exit daemon
+        // 'P': pause playback
+        // 'C': clear weights (go back to white noise)
+        // '0'..'9': recall slot
+        // Ctrl + '0'..'9': save slot
         iced_native::subscription::events_with(|event, status| match (status, event) {
             /* TODO apparently this event is not emitted on mod+Shift+q in newer iced versions. Should debug. */
             (_, iced_native::Event::Window(iced_native::window::Event::CloseRequested)) => {

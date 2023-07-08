@@ -1,10 +1,6 @@
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use std::{
-    fs::{self, read},
-    os::unix::net::UnixDatagram,
-    path::Path,
-};
+use std::{fs, os::unix::net::UnixDatagram, path::Path};
 
 use crate::{Weights, SOCKET_PATH};
 
