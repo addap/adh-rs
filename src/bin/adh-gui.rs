@@ -5,8 +5,8 @@ use iced::window::{self, Position};
 use iced::{
     executor, theme, Alignment, Application, Command, Element, Point, Settings, Subscription,
 };
-use iced_native::event::Status;
-use iced_native::keyboard::KeyCode;
+use iced_runtime::core::event::Status;
+use iced_runtime::core::keyboard::KeyCode;
 use std::usize;
 use xdg::{self, BaseDirectories};
 
@@ -39,6 +39,12 @@ pub fn main() -> iced::Result {
             size: window_size,
             max_size: Some(window_size),
             position: Position::Specific(window_position.0 as i32, window_position.1 as i32),
+            platform_specific: iced::window::PlatformSpecific {
+                x11_window_type: vec![
+                    winit::platform::x11::XWindowType::Notification,
+                    winit::platform::x11::XWindowType::Utility,
+                ],
+            },
             ..iced::window::Settings::default()
         },
         ..Settings::default()
@@ -213,46 +219,59 @@ impl Application for TrayUtility {
         // 'C': clear weights (go back to white noise)
         // '0'..'9': recall slot
         // Ctrl + '0'..'9': save slot
-        iced_native::subscription::events_with(|event, status| match (status, event) {
+        iced_runtime::futures::subscription::events_with(|event, status| match (status, event) {
             /* TODO apparently this event is not emitted on mod+Shift+q in newer iced versions. Should debug. */
-            (_, iced_native::Event::Window(iced_native::window::Event::CloseRequested)) => {
-                Some(Message::ExitApplication)
-            }
             (
-                Status::Ignored,
-                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
-                    key_code: KeyCode::Q,
-                    ..
-                }),
+                _,
+                iced_runtime::core::Event::Window(
+                    iced_runtime::core::window::Event::CloseRequested,
+                ),
             ) => Some(Message::ExitApplication),
             (
                 Status::Ignored,
-                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
-                    key_code: KeyCode::D,
-                    ..
-                }),
+                iced_runtime::core::Event::Keyboard(
+                    iced_runtime::core::keyboard::Event::KeyPressed {
+                        key_code: KeyCode::Q,
+                        ..
+                    },
+                ),
+            ) => Some(Message::ExitApplication),
+            (
+                Status::Ignored,
+                iced_runtime::core::Event::Keyboard(
+                    iced_runtime::core::keyboard::Event::KeyPressed {
+                        key_code: KeyCode::D,
+                        ..
+                    },
+                ),
             ) => Some(Message::ExitDaemon),
             (
                 Status::Ignored,
-                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
-                    key_code: KeyCode::P,
-                    ..
-                }),
+                iced_runtime::core::Event::Keyboard(
+                    iced_runtime::core::keyboard::Event::KeyPressed {
+                        key_code: KeyCode::P,
+                        ..
+                    },
+                ),
             ) => Some(Message::TogglePlay),
             (
                 Status::Ignored,
-                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
-                    key_code: KeyCode::C,
-                    ..
-                }),
+                iced_runtime::core::Event::Keyboard(
+                    iced_runtime::core::keyboard::Event::KeyPressed {
+                        key_code: KeyCode::C,
+                        ..
+                    },
+                ),
             ) => Some(Message::Clear),
             // this one should be last since it captures all keys to filter out the num keys
             (
                 Status::Ignored,
-                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
-                    key_code,
-                    modifiers,
-                }),
+                iced_runtime::core::Event::Keyboard(
+                    iced_runtime::core::keyboard::Event::KeyPressed {
+                        key_code,
+                        modifiers,
+                    },
+                ),
             ) => {
                 fn key_code_to_num(key_code: KeyCode) -> Option<usize> {
                     match key_code {
@@ -303,10 +322,11 @@ mod util {
 
 mod equalizer {
     use iced::widget::canvas::event::{self, Event};
-    use iced::widget::canvas::{
-        self, gradient, Canvas, Cursor, Fill, Frame, Geometry, Gradient, Path, Stroke,
+    use iced::widget::canvas::{self, gradient, Canvas, Fill, Frame, Geometry, Path, Stroke};
+    use iced::{
+        mouse::{self, Cursor},
+        Color, Size,
     };
-    use iced::{mouse, Color, Size};
     use iced::{Element, Length, Point, Rectangle, Theme};
 
     use super::util::weight_to_ypos;
@@ -399,7 +419,7 @@ mod equalizer {
                 _ => {}
             };
 
-            let cursor_position = if let Some(position) = cursor.position_in(&bounds) {
+            let cursor_position = if let Some(position) = cursor.position_in(bounds) {
                 position
             } else {
                 return (event::Status::Ignored, Some(Message::OutOfBounds));
@@ -426,86 +446,84 @@ mod equalizer {
         fn draw(
             &self,
             _state: &Self::State,
+            renderer: &iced::Renderer,
             _theme: &Theme,
             bounds: Rectangle,
             _cursor: Cursor,
         ) -> Vec<Geometry> {
-            let content = self.state.cache.draw(bounds.size(), |frame: &mut Frame| {
-                let (width, height) = canvas_size();
+            let content = self
+                .state
+                .cache
+                .draw(renderer, bounds.size(), |frame: &mut Frame| {
+                    let (width, height) = canvas_size();
 
-                let gradient = Gradient::linear(gradient::Position::Relative {
-                    top_left: Point { x: 0.0, y: 0.0 },
-                    size: Size::new(width, height),
-                    start: gradient::Location::Left,
-                    end: gradient::Location::Right,
-                })
-                .add_stop(0.0, Color::from_rgb8(0x80, 0, 0))
-                .add_stop(0.1, Color::from_rgb8(0xFF, 0, 0))
-                .add_stop(0.3, Color::from_rgb8(0xFF, 0xFF, 0))
-                .add_stop(0.5, Color::from_rgb8(0x00, 0x80, 0))
-                .add_stop(0.7, Color::from_rgb8(0x00, 0x80, 0))
-                .add_stop(0.9, Color::from_rgb8(0x00, 0xFF, 0xFF))
-                .add_stop(1.0, Color::from_rgb8(0x80, 0, 0x80))
-                .build()
-                .unwrap();
+                    let gradient =
+                        gradient::Linear::new(Point { x: 0.0, y: 0.0 }, Point { x: width, y: 0.0 })
+                            .add_stop(0.0, Color::from_rgb8(0x80, 0, 0))
+                            .add_stop(0.1, Color::from_rgb8(0xFF, 0, 0))
+                            .add_stop(0.3, Color::from_rgb8(0xFF, 0xFF, 0))
+                            .add_stop(0.5, Color::from_rgb8(0x00, 0x80, 0))
+                            .add_stop(0.7, Color::from_rgb8(0x00, 0x80, 0))
+                            .add_stop(0.9, Color::from_rgb8(0x00, 0xFF, 0xFF))
+                            .add_stop(1.0, Color::from_rgb8(0x80, 0, 0x80));
 
-                for (i, w) in self.weights.v.iter().enumerate() {
-                    // Scale weight back into y position on canvas.
-                    let x = i as f32 * SEGMENTS_WIDTH;
-                    let y = weight_to_ypos(*w);
-                    const GRADIENT_PADDING: f32 = 5.0;
-                    const THUMB_SIZE: f32 = 3.0;
+                    for (i, w) in self.weights.v.iter().enumerate() {
+                        // Scale weight back into y position on canvas.
+                        let x = i as f32 * SEGMENTS_WIDTH;
+                        let y = weight_to_ypos(*w);
+                        const GRADIENT_PADDING: f32 = 5.0;
+                        const THUMB_SIZE: f32 = 3.0;
 
-                    frame.fill_rectangle(
-                        Point { x, y: y },
-                        Size::new(SEGMENTS_WIDTH, height - WEIGHTS_PADDING_Y - y),
-                        gradient.clone(),
-                    );
+                        frame.fill_rectangle(
+                            Point { x, y: y },
+                            Size::new(SEGMENTS_WIDTH, height - WEIGHTS_PADDING_Y - y),
+                            gradient.clone(),
+                        );
 
-                    frame.fill_rectangle(
-                        Point {
-                            x,
-                            y: y - GRADIENT_PADDING,
-                        },
-                        Size::new(SEGMENTS_WIDTH, THUMB_SIZE),
-                        Fill::default(),
-                    );
-
-                    frame.stroke(
-                        &Path::line(
+                        frame.fill_rectangle(
                             Point {
                                 x,
                                 y: y - GRADIENT_PADDING,
                             },
-                            Point {
-                                x,
-                                y: height - WEIGHTS_PADDING_Y,
-                            },
-                        ),
-                        Stroke::default(),
-                    );
+                            Size::new(SEGMENTS_WIDTH, THUMB_SIZE),
+                            Fill::default(),
+                        );
 
+                        frame.stroke(
+                            &Path::line(
+                                Point {
+                                    x,
+                                    y: y - GRADIENT_PADDING,
+                                },
+                                Point {
+                                    x,
+                                    y: height - WEIGHTS_PADDING_Y,
+                                },
+                            ),
+                            Stroke::default(),
+                        );
+
+                        frame.stroke(
+                            &Path::line(
+                                Point {
+                                    x: x + SEGMENTS_WIDTH,
+                                    y: y - GRADIENT_PADDING,
+                                },
+                                Point {
+                                    x: x + SEGMENTS_WIDTH,
+                                    y: height - WEIGHTS_PADDING_Y,
+                                },
+                            ),
+                            Stroke::default(),
+                        );
+                    }
+
+                    // Draw a line around the canvas.
                     frame.stroke(
-                        &Path::line(
-                            Point {
-                                x: x + SEGMENTS_WIDTH,
-                                y: y - GRADIENT_PADDING,
-                            },
-                            Point {
-                                x: x + SEGMENTS_WIDTH,
-                                y: height - WEIGHTS_PADDING_Y,
-                            },
-                        ),
-                        Stroke::default(),
+                        &Path::rectangle(Point::ORIGIN, frame.size()),
+                        Stroke::default().with_width(2.0),
                     );
-                }
-
-                // Draw a line around the canvas.
-                frame.stroke(
-                    &Path::rectangle(Point::ORIGIN, frame.size()),
-                    Stroke::default().with_width(2.0),
-                );
-            });
+                });
 
             vec![content]
         }
@@ -516,7 +534,7 @@ mod equalizer {
             bounds: Rectangle,
             cursor: Cursor,
         ) -> mouse::Interaction {
-            if cursor.is_over(&bounds) {
+            if cursor.is_over(bounds) {
                 mouse::Interaction::Crosshair
             } else {
                 mouse::Interaction::default()
