@@ -1,9 +1,13 @@
 use equalizer::canvas_size;
+use fundsp::math::lerp;
 use iced::widget::column;
 use iced::window::{self, Position};
-use iced::{executor, theme, Alignment, Application, Command, Element, Settings, Subscription};
+use iced::{
+    executor, theme, Alignment, Application, Command, Element, Point, Settings, Subscription,
+};
 use iced_native::event::Status;
 use iced_native::keyboard::KeyCode;
+use std::usize;
 use xdg::{self, BaseDirectories};
 
 use adh_rs::{
@@ -49,6 +53,7 @@ struct TrayUtility {
     protocol: Protocol,
     slots: Slots,
     xdg: BaseDirectories,
+    last_segment_weight: Option<(usize, f32)>,
 }
 
 impl TrayUtility {
@@ -64,6 +69,7 @@ impl TrayUtility {
             protocol,
             slots,
             xdg,
+            last_segment_weight: None,
         }
     }
 
@@ -73,11 +79,19 @@ impl TrayUtility {
         self.slots.write_to_disk(&self.xdg);
         window::close()
     }
+
+    /// Send the weights to the daemon.
+    fn send_weights(&self) {
+        self.protocol
+            .send(&protocol::Command::SetWeights(self.weights))
+            .unwrap();
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
 enum Message {
-    SetWeight((usize, f32)),
+    ProcessCursorPosition(Point),
+    OutOfBounds,
     ConfirmWeights,
     Clear,
     ExitApplication,
@@ -103,18 +117,68 @@ impl Application for TrayUtility {
 
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::SetWeight((i, weight)) => {
-                self.weights.v.get_mut(i).map(|w| *w = weight);
+            Message::ProcessCursorPosition(_) => {}
+            // Reset the last segment so that it does not try to interpolate skipped segment weights when the user briefly exits the canvas area while mouse is pressed.
+            _ => self.last_segment_weight = None,
+        };
+
+        match message {
+            Message::ProcessCursorPosition(cursor_position) => {
+                // Calculate the segment we are in based on x position of cursor.
+                let current_segment = util::xpos_to_segment(cursor_position.x);
+                let current_weight = util::ypos_to_weight(cursor_position.y);
+
+                // Moving the mouse quickly can lead to skipping over segments, i.e. no ProcessCursorPosition event is emitted for the segment.
+                // For the user, this leads to unintended spikes in the frequency band weights.
+                // So we calculate interpolated weights for the skipped segments.
+                // The current segment will need to be set either way. We initialize the array with it so that even if self.last_segment_weight is None, the weight is set.
+                let mut weight_changes = vec![(current_segment, current_weight)];
+
+                if let Some((last_segment, last_weight)) = self.last_segment_weight {
+                    let segment_diff = current_segment.abs_diff(last_segment);
+                    // If the difference is 0 or 1, we are in the same segment as last time or an adjacent one, so no skipped segments.
+                    if segment_diff >= 2 {
+                        // Otherwise we interpolate between the last weight and current weight to set the weights for the segments we skipped
+                        let ((start_segment, start_weight), (end_segment, end_weight)) =
+                            if current_segment < last_segment {
+                                (
+                                    (current_segment, current_weight),
+                                    (last_segment, last_weight),
+                                )
+                            } else {
+                                (
+                                    (last_segment, last_weight),
+                                    (current_segment, current_weight),
+                                )
+                            };
+
+                        // Due to the way the loop is structured, current_segment will be set twice. But it uses the same value so we do not filter it out.
+                        for (i, segment) in (start_segment..=end_segment).enumerate() {
+                            // segment_diff is never 0 here because we checked that segment_diff >= 2.
+                            let t = i as f32 / segment_diff as f32;
+                            let weight = lerp(start_weight, end_weight, t);
+
+                            weight_changes.push((segment, weight));
+                        }
+                    }
+                }
+
+                for (segment, weight) in weight_changes {
+                    self.weights.v.get_mut(segment).map(|w| *w = weight);
+                }
+                self.last_segment_weight = Some((current_segment, current_weight));
                 self.equalizer.request_redraw();
             }
+            Message::OutOfBounds => {
+                // Don't need to do anything because self.last_segment_index is already reset.
+            }
             Message::ConfirmWeights => {
-                self.protocol
-                    .send(&protocol::Command::SetWeights(self.weights))
-                    .unwrap();
+                self.send_weights();
             }
             Message::Clear => {
-                self.equalizer = equalizer::State::default();
                 self.weights = Weights::default();
+                self.equalizer = equalizer::State::default();
+                self.send_weights();
             }
             Message::ExitApplication => {
                 return self.window_close();
@@ -130,6 +194,7 @@ impl Application for TrayUtility {
             Message::RecallSlot(idx) => {
                 self.weights = self.slots.recall_slot(idx);
                 self.equalizer.request_redraw();
+                self.send_weights();
             }
         };
 
@@ -181,6 +246,13 @@ impl Application for TrayUtility {
                     ..
                 }),
             ) => Some(Message::TogglePlay),
+            (
+                Status::Ignored,
+                iced_native::Event::Keyboard(iced_native::keyboard::Event::KeyPressed {
+                    key_code: KeyCode::C,
+                    ..
+                }),
+            ) => Some(Message::Clear),
             // this one should be last since it captures all keys to filter out the num keys
             (
                 Status::Ignored,
@@ -217,6 +289,25 @@ impl Application for TrayUtility {
     }
 }
 
+/// Some utility functions for converting coordinates
+mod util {
+    use super::{
+        CANVAS_HEIGHT, SEGMENTS_WEIGHT_MAX, SEGMENTS_WIDTH, WEIGHTS_NUM, WEIGHTS_PADDING_Y,
+    };
+
+    pub fn weight_to_ypos(weight: f32) -> f32 {
+        CANVAS_HEIGHT + WEIGHTS_PADDING_Y - (weight * CANVAS_HEIGHT)
+    }
+
+    pub fn ypos_to_weight(y: f32) -> f32 {
+        ((CANVAS_HEIGHT + WEIGHTS_PADDING_Y - y) / CANVAS_HEIGHT).clamp(0.0, SEGMENTS_WEIGHT_MAX)
+    }
+
+    pub fn xpos_to_segment(x: f32) -> usize {
+        ((x / SEGMENTS_WIDTH).floor() as usize).clamp(0, WEIGHTS_NUM - 1)
+    }
+}
+
 mod equalizer {
     use iced::widget::canvas::event::{self, Event};
     use iced::widget::canvas::{
@@ -225,10 +316,9 @@ mod equalizer {
     use iced::{mouse, Color, Size};
     use iced::{Element, Length, Point, Rectangle, Theme};
 
-    use super::{
-        Message, Weights, CANVAS_HEIGHT, SEGMENTS_WEIGHT_MAX, SEGMENTS_WIDTH, WEIGHTS_NUM,
-        WEIGHTS_PADDING_Y,
-    };
+    use super::util::weight_to_ypos;
+
+    use super::{Message, Weights, CANVAS_HEIGHT, SEGMENTS_WIDTH, WEIGHTS_NUM, WEIGHTS_PADDING_Y};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum ControlStatus {
@@ -286,14 +376,6 @@ mod equalizer {
         weights: &'a Weights,
     }
 
-    fn weight_to_ypos(weight: f32) -> f32 {
-        CANVAS_HEIGHT + WEIGHTS_PADDING_Y - (weight * CANVAS_HEIGHT)
-    }
-
-    fn ypos_to_weight(y: f32) -> f32 {
-        ((CANVAS_HEIGHT + WEIGHTS_PADDING_Y - y) / CANVAS_HEIGHT).clamp(0.0, SEGMENTS_WEIGHT_MAX)
-    }
-
     impl<'a> canvas::Program<Message> for Equalizer<'a> {
         type State = ControlStatus;
 
@@ -316,14 +398,9 @@ mod equalizer {
                         if state.is_active() =>
                     {
                         *state = ControlStatus::Inactive;
+                        // a.d. iirc when the cursor left we want something else to be able to handle the event so we return Ignored.
                         return (event::Status::Ignored, Some(Message::ConfirmWeights));
                     }
-                    // mouse::Event::CursorLeft
-                    // | mouse::Event::ButtonReleased(mouse::Button::Left)
-                    //     if !state.is_active() =>
-                    // {
-                    //     return (event::Status::Ignored, None);
-                    // }
                     _ => {}
                 },
                 _ => {}
@@ -332,7 +409,7 @@ mod equalizer {
             let cursor_position = if let Some(position) = cursor.position_in(&bounds) {
                 position
             } else {
-                return (event::Status::Ignored, None);
+                return (event::Status::Ignored, Some(Message::OutOfBounds));
             };
 
             match event {
@@ -342,16 +419,7 @@ mod equalizer {
                         | mouse::Event::ButtonPressed(mouse::Button::Left)
                             if state.is_active() =>
                         {
-                            // Calculate the segment we are in based on x position of cursor.
-                            let segment = (cursor_position.x / SEGMENTS_WIDTH)
-                                .floor()
-                                .clamp(0.0, 31.0)
-                                as usize;
-                            let weight = ypos_to_weight(cursor_position.y);
-
-                            let r = Message::SetWeight((segment, weight));
-                            // println!("{}", r);
-                            Some(r)
+                            Some(Message::ProcessCursorPosition(cursor_position))
                         }
                         _ => None,
                     };

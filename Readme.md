@@ -23,7 +23,10 @@ The daemon has a system-tray icon which can be used to shut down the daemon or s
 - [x] GUI for specifying frequency band weights
   - [x] Start/stop audio streams
   - [x] Saving frequency band weights
-  - [ ] Straight line algorithm to prevent skipping frequency bands when moving mouse quickly
+  - [x] Straight line algorithm to prevent skipping frequency bands when moving mouse quickly
 - [x] Daemon to play the noise while in background.
   - [x] Socket activation so that when starting the GUI the daemon is started lazily.
+  - [ ] Better event handling in the daemon (one event queue instead of two threads)
 - [x] Systray icon
+- [ ] Maybe make it work on windows
+

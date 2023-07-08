@@ -1,0 +1,286 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in library 'adh-rs'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--lib",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "adh-rs",
+                    "kind": "lib"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'adh-rs'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=adh-rs",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "adh-rs",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'adh-rs'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=adh-rs",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "adh-rs",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'fundsp_example'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=fundsp_example",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "fundsp_example",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'fundsp_example'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=fundsp_example",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "fundsp_example",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'daemonize-test'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=daemonize-test",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "daemonize-test",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'daemonize-test'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=daemonize-test",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "daemonize-test",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'daemonize-test2'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=daemonize-test2",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "daemonize-test2",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'daemonize-test2'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=daemonize-test2",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "daemonize-test2",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'gen_noise'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=gen_noise",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "gen_noise",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'gen_noise'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=gen_noise",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "gen_noise",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'gui'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=gui",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "gui",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'gui'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=gui",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "gui",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'adhdaemon'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=adhdaemon",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "adhdaemon",
+                    "kind": "bin"
+                }
+            },
+            "args": ["--daemon"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'adhdaemon'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=adhdaemon",
+                    "--package=adh-rs"
+                ],
+                "filter": {
+                    "name": "adhdaemon",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
