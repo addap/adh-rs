@@ -1,27 +1,31 @@
 use anyhow::anyhow;
 use fundsp::prelude::lerp;
 use std::f32;
-use std::sync::Arc;
 
 pub const CHUNK_SAMPLES: usize = 44_100 * 3;
 const BLEND_WINDOW: usize = 1000;
 
-pub type Samples = [f32; CHUNK_SAMPLES];
+pub type RawSample = [f32; CHUNK_SAMPLES];
 
 #[derive(Debug, Clone)]
-pub struct PlayableChunk {
-    data: Arc<Samples>,
+pub struct Sample {
+    data: Box<RawSample>,
 }
 
-impl PlayableChunk {
+impl Sample {
     pub fn new(data: Vec<f32>) -> Result<Self, anyhow::Error> {
         if data.len() != CHUNK_SAMPLES {
             return Err(anyhow!("Length mismatch"));
         }
 
-        let arc: Arc<[f32]> = Arc::from(data);
-        let ptr = Arc::into_raw(arc) as *mut [f32; CHUNK_SAMPLES];
-        let data = unsafe { Arc::from_raw(ptr) };
+        // a.d. TODO how does into_boxed_slice restrict the capacity to the length.
+        // For example, if data.len == 3 but data.capacity == 4 and we put the data into a box of type Box<[f32; 3]> without
+        // altering the capcaity, then when we free the memory of the Box we trigger undefined behavior.
+        // This is because we would only try to free the memory of 3 f32's while the allocation was for 4.
+        // But apparently this method ensures that the undefined behavior does not happen.
+        let boxed_data = data.into_boxed_slice();
+        let ptr = Box::into_raw(boxed_data) as *mut [f32; CHUNK_SAMPLES];
+        let data = unsafe { Box::from_raw(ptr) };
         Ok(Self { data })
     }
 
@@ -30,13 +34,13 @@ impl PlayableChunk {
     }
 }
 
-impl IntoIterator for PlayableChunk {
+impl IntoIterator for Sample {
     type Item = f32;
 
-    type IntoIter = PlayableChunkIter;
+    type IntoIter = SampleIterator;
 
     fn into_iter(self) -> Self::IntoIter {
-        PlayableChunkIter {
+        SampleIterator {
             data: self.data,
             fwd_idx: 0,
             bwd_idx: CHUNK_SAMPLES,
@@ -45,13 +49,13 @@ impl IntoIterator for PlayableChunk {
 }
 
 #[derive(Debug, Clone)]
-pub struct PlayableChunkIter {
-    data: Arc<Samples>,
+pub struct SampleIterator {
+    data: Box<RawSample>,
     fwd_idx: usize,
     bwd_idx: usize,
 }
 
-impl Iterator for PlayableChunkIter {
+impl Iterator for SampleIterator {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -70,7 +74,7 @@ impl Iterator for PlayableChunkIter {
     }
 }
 
-impl DoubleEndedIterator for PlayableChunkIter {
+impl DoubleEndedIterator for SampleIterator {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.fwd_idx < self.bwd_idx {
             self.bwd_idx -= 1;
@@ -82,7 +86,7 @@ impl DoubleEndedIterator for PlayableChunkIter {
     }
 }
 
-impl ExactSizeIterator for PlayableChunkIter {}
+impl ExactSizeIterator for SampleIterator {}
 
 #[derive(Debug, Clone, Copy)]
 pub enum SmoothingType {
@@ -118,27 +122,27 @@ impl BlendType {
     }
 }
 
-pub struct ChunkCollection {
-    chunks: Vec<PlayableChunk>,
+pub struct BlendingSamples {
+    samples: Vec<Sample>,
     smoothing_type: SmoothingType,
 }
 
-type SampleIter = Box<dyn Iterator<Item = (f32, f32)> + Send>;
+type StereoSampleIter = Box<dyn Iterator<Item = (f32, f32)> + Send>;
 
-struct BlendingChunksIter<I, J> {
+struct BlendingSamplesIterator<I, J> {
     chunk_iter: I,
     current_chunk: J,
     next_chunk: J,
     blend_type: BlendType,
 }
 
-impl ChunkCollection {
-    pub fn new(chunks: Vec<PlayableChunk>) -> Result<Self, anyhow::Error> {
+impl BlendingSamples {
+    pub fn new(chunks: Vec<Sample>) -> Result<Self, anyhow::Error> {
         if chunks.is_empty() {
             return Err(anyhow!("Empty chunks"));
         }
         Ok(Self {
-            chunks,
+            samples: chunks,
             smoothing_type: Default::default(),
         })
     }
@@ -153,10 +157,10 @@ impl ChunkCollection {
         self
     }
 
-    pub fn into_iter(self) -> Result<SampleIter, anyhow::Error> {
+    pub fn into_iter(self) -> Result<StereoSampleIter, anyhow::Error> {
         match self.smoothing_type {
             SmoothingType::Mirror => {
-                let first_chunk = self.chunks.into_iter().next().unwrap();
+                let first_chunk = self.samples.into_iter().next().unwrap();
 
                 let iter = first_chunk
                     .clone()
@@ -167,15 +171,15 @@ impl ChunkCollection {
 
                 Ok(Box::new(iter))
             }
-            SmoothingType::Blend(blend_type) => Ok(Box::new(BlendingChunksIter::new(
-                self.chunks.into_iter().cycle(),
+            SmoothingType::Blend(blend_type) => Ok(Box::new(BlendingSamplesIterator::new(
+                self.samples.into_iter().cycle(),
                 blend_type,
             )?)),
         }
     }
 }
 
-impl<I: Iterator<Item = J>, J: IntoIterator<IntoIter = K>, K> BlendingChunksIter<I, K> {
+impl<I: Iterator<Item = J>, J: IntoIterator<IntoIter = K>, K> BlendingSamplesIterator<I, K> {
     fn new(mut chunk_iter: I, blend_type: BlendType) -> Result<Self, anyhow::Error> {
         let current_chunk = chunk_iter.next().unwrap();
         let next_chunk = chunk_iter.next().unwrap();
@@ -193,7 +197,7 @@ impl<
         I: Iterator<Item = J>,
         J: IntoIterator<Item = f32, IntoIter = K>,
         K: Iterator<Item = f32> + ExactSizeIterator,
-    > Iterator for BlendingChunksIter<I, K>
+    > Iterator for BlendingSamplesIterator<I, K>
 {
     type Item = (f32, f32);
 

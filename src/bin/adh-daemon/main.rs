@@ -12,8 +12,8 @@ mod tray_icon;
 
 use adh_rs::{
     audio_bridge::play,
-    chunk::{BlendType, ChunkCollection},
     protocol::{GUICommand, Protocol},
+    samples::{BlendType, BlendingSamples},
 };
 use tray_icon::TrayCommand;
 
@@ -132,7 +132,7 @@ fn main() -> Result<(), anyhow::Error> {
             Ok(DaemonCommand::GUI(GUICommand::SetWeights(weights))) => {
                 let samples1 = adh_rs::generator::gen_weighted_noise(&weights);
                 let samples2 = adh_rs::generator::gen_weighted_noise(&weights);
-                let chunks = ChunkCollection::new(vec![samples1, samples2])
+                let chunks = BlendingSamples::new(vec![samples1, samples2])
                     .unwrap()
                     .with_blend(BlendType::Sigmoid);
 

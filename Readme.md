@@ -54,4 +54,4 @@ Now just running `adh-gui` should start the daemon when releasing the mouse butt
 - [x] Systray icon
 - [ ] Maybe make it work on windows
 - [ ] Proper logging
-- [ ] More documentation (especially for all the Chunk iter stuff and why Arc is needed)
+- [ ] More documentation (especially for all the sample iter stuff

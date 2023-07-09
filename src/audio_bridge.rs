@@ -17,13 +17,13 @@ use cpal::{FromSample, SizedSample};
 use std::f32;
 use std::time::Instant;
 
-use crate::chunk::ChunkCollection;
+use crate::samples::BlendingSamples;
 
 pub struct AudioStream {
     pub stream: cpal::Stream,
 }
 
-pub fn play(chunks: ChunkCollection) -> AudioStream {
+pub fn play(chunks: BlendingSamples) -> AudioStream {
     let host = cpal::default_host();
 
     let device = host
@@ -42,7 +42,7 @@ pub fn play(chunks: ChunkCollection) -> AudioStream {
 fn run2<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    chunks: ChunkCollection,
+    chunks: BlendingSamples,
 ) -> Result<AudioStream, anyhow::Error>
 where
     T: SizedSample + FromSample<f32>,

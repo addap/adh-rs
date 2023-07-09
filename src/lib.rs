@@ -6,10 +6,10 @@ use std::{
 };
 
 pub mod audio_bridge;
-pub mod chunk;
 pub mod generator;
 pub mod misc;
 pub mod protocol;
+pub mod samples;
 pub mod slots;
 
 pub const WEIGHTS_NUM: usize = 32;

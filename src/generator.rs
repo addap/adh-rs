@@ -3,7 +3,7 @@ use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
 
 use crate::{
-    chunk::{PlayableChunk, CHUNK_SAMPLES},
+    samples::{Sample, CHUNK_SAMPLES},
     Weights, WEIGHTS_NUM,
 };
 
@@ -40,7 +40,7 @@ pub fn freq_domain_bin2(i: usize) -> f32 {
 }
 
 // Generate noise with weighted frequency bands according to `weights`.
-pub fn gen_weighted_noise(weights: &Weights) -> PlayableChunk {
+pub fn gen_weighted_noise(weights: &Weights) -> Sample {
     let mut freqs = gen_white_freqs();
 
     for i in 0..CHUNK_SAMPLES {
@@ -52,7 +52,7 @@ pub fn gen_weighted_noise(weights: &Weights) -> PlayableChunk {
 
     idct(&mut freqs);
 
-    PlayableChunk::new(freqs).unwrap()
+    Sample::new(freqs).unwrap()
 }
 
 // Inverse discrete cosine transform to transform frequencies back into audio waves.
