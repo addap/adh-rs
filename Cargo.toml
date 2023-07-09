@@ -27,20 +27,18 @@ systemd = "0.10.0"
 xdg = "2.5.0"
 
 [dependencies.iced]
-path = "../iced"
-#git = "https://github.com/addap/iced.git"
+#path = "../iced"
+git = "https://github.com/addap/iced.git"
 features = [ "canvas" ]
 
 [dependencies.iced_runtime]
-path = "../iced/runtime"
-#git = "https://github.com/addap/iced.git"
+#path = "../iced/runtime"
+git = "https://github.com/addap/iced.git"
 
 [dependencies.winit]
 version = "0.28"
 git = "https://github.com/iced-rs/winit.git"
 rev = "c52db2045d0a2f1b8d9923870de1d4ab1994146e"
-features = [ "x11" ]
-default-features = false
 
 #[dependencies.plotters]
 #git = "https://github.com/plotters-rs/plotters.git"
