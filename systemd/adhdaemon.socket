@@ -1,6 +1,7 @@
 [Socket]
-ListenDatagram = /tmp/adh-rs.socket
-FileDescriptorName = noise
+# %t is $XDG_RUNTIME_DIR
+ListenDatagram = %t/adh-rs.sock
+FileDescriptorName = gui-commands
 Service = adhdaemon.service
 
 [Install]

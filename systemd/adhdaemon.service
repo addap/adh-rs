@@ -1,13 +1,7 @@
 [Unit]
-Description=Amazing Test Service
+Description=Daemon for the ahd-rs noise generator
 
 [Service]
 Type=simple
-# Environment=NPM_DIR=/home/test/.npm
-# EnvironmentFile=-/etc/default/extra
-# WorkingDirectory=/home/test/app
-ExecStart=/home/adrian/programming/rust/adh-rs/target/debug/adhdaemon --daemon
-# Restart=on-failure
-
-# [Install]
-# WantedBy=multi-user.target
+ExecStart=%h/.cargo/bin/adh-daemon
+Environment="PATH=/usr/local/bin:/usr/bin:%h/.cargo/bin"

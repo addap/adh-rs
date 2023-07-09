@@ -11,10 +11,34 @@ By applying weights to the frequencies we can change the resulting noise to diff
 Running the app starts the GUI, which has a soundboard-like equalizer interface to set the weights for different frequency bands.
 If the daemon is not running, it is also started.
 
-Setting some weights sends them to the daemon.
+By keeping the left mouse button pressed while dragging the mouse, you can change the values of the equalizer.
+Releasing the left mouse button confirms the weights and sends them to the daemon.
 The GUI can be closed afterwards.
 The daemon will then generate noise samples and play them continuously on repeat.
 The daemon has a system-tray icon which can be used to shut down the daemon or start the GUI again.
+
+## Install
+
+The following will place `adh-gui` and `adh-daemon` in your `~/.cargo/bin`. Then place the icon in the local resource directory.
+
+```bash
+$ cargo install --locked --path .
+$ mkdir -p ~/.local/share/adh-rs/resources
+$ cp resources/tray-icon.png ~/.local/share/adh-rs/resources
+```
+
+Running the daemon and gui manually should work afterwards.
+To make the GUI automatically spawn the daemon via systemd socket activation, place the two systemd unit files in your `~/.config/systemd/user/` directory.
+Then reload the daemon and enable & start the socket.
+
+```bash
+$ cp systemd/adhdaemon.service systemd/adhdaemon.socket  ~/.config/systemd/user
+$ systemctl --user daemon-reload
+$ systemctl --user enable adhdaemon.socket
+$ systemctl --user start adhdaemon.socket
+```
+
+Now just running `adh-gui` should start the daemon when releasing the mouse button to confirm the weights (notice the system tray icon appearing).
 
 ## TODO
 
@@ -26,7 +50,8 @@ The daemon has a system-tray icon which can be used to shut down the daemon or s
   - [x] Straight line algorithm to prevent skipping frequency bands when moving mouse quickly
 - [x] Daemon to play the noise while in background.
   - [x] Socket activation so that when starting the GUI the daemon is started lazily.
-  - [ ] Better event handling in the daemon (one event queue instead of two threads)
+  - [x] Better event handling in the daemon (one event queue instead of two threads)
 - [x] Systray icon
 - [ ] Maybe make it work on windows
-
+- [ ] Proper logging
+- [ ] More documentation (especially for all the Chunk iter stuff and why Arc is needed)

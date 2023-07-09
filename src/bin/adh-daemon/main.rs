@@ -1,3 +1,4 @@
+use adh_rs::is_development;
 use anyhow::anyhow;
 use cpal::traits::StreamTrait;
 use lazy_static::lazy_static;
@@ -21,7 +22,7 @@ lazy_static! {
     /// During development we use the executable in cargo's target/ directory.
     /// Otherwise we use the executable on the PATH.
     static ref GUI_PROGRAM_NAME: PathBuf = {
-        if cfg!(debug_assertions) {
+        if is_development() {
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("target/debug/adh-gui")
                 .to_owned()
@@ -40,14 +41,14 @@ pub enum DaemonCommand {
 }
 
 /// Create a protocol instance for communicating with the GUI.
-/// If this program is started as a daemon, then we get the socket file descriptor
-/// from systemd.
-/// Otherwise we create a new socket.
+/// In development mode, the daemon creates the socket itself.
+/// Othersize, we get the socket file descriptor from systemd.
 fn get_protocol() -> Protocol {
-    // a.d. TODO better command line argument handling.
-    if let Some(arg) = std::env::args().nth(1) {
-        if &arg == "--daemon" {
-            let fd = daemon::listen_fds(false).unwrap().iter().next().unwrap();
+    if is_development() {
+        Protocol::new_recv().unwrap()
+    } else {
+        fn get_systemd_socket() -> Option<Protocol> {
+            let fd = daemon::listen_fds(false).ok()?.iter().next()?;
             assert!(daemon::is_socket_unix(
                 fd,
                 Some(daemon::SocketType::Datagram),
@@ -57,12 +58,17 @@ fn get_protocol() -> Protocol {
             )
             .unwrap());
             let sock = unsafe { UnixDatagram::from_raw_fd(fd) };
-            Protocol::new_raw(sock)
-        } else {
-            Protocol::new_recv().unwrap()
+            Some(Protocol::new_raw(sock))
         }
-    } else {
-        Protocol::new_recv().unwrap()
+
+        // If getting the socket from systemd failed, fall back on a manually created one.
+        match get_systemd_socket() {
+            Some(protocol) => protocol,
+            None => {
+                eprintln!("Warning: not in development mode but systemd did not give us a socket. Falling back on manually created socket.");
+                Protocol::new_recv().unwrap()
+            }
+        }
     }
 }
 
@@ -100,11 +106,20 @@ fn main() -> Result<(), anyhow::Error> {
         match command {
             // We cannot run the GUI as a separate thread because iced wants to be tha main thread.
             // So we spawn a new process.
+            // We pass along the --dev argument (it's to ugly but the best I came up with so far)
             Ok(DaemonCommand::Tray(TrayCommand::RunGUI)) => {
                 println!("exec gui process");
-                std::process::Command::new(GUI_PROGRAM_NAME.as_path())
-                    .spawn()
-                    .expect("exec gui failed");
+                let gui_path = GUI_PROGRAM_NAME.as_path();
+
+                let mut gui_command = std::process::Command::new(gui_path);
+                if is_development() {
+                    println!("Daemon is in dev mode so start the GUI also in dev mode.");
+                    gui_command.arg("--dev");
+                }
+                match gui_command.spawn() {
+                    Ok(_) => {}
+                    Err(e) => eprintln!("Spawning GUI failed: {e}"),
+                }
             }
             // Quit command can come from both the GUI and the system tray icon.
             // Returning from the main function here will the threads we spawned.

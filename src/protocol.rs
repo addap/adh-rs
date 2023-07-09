@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use std::{fs, os::unix::net::UnixDatagram, path::Path};
+use std::{fs, os::unix::net::UnixDatagram};
 
 use crate::{Weights, SOCKET_PATH};
 
@@ -22,7 +22,7 @@ impl Protocol {
     }
 
     pub fn new_recv() -> Result<Self, anyhow::Error> {
-        let socket_path = Path::new(SOCKET_PATH);
+        let socket_path = SOCKET_PATH.as_path();
         if socket_path.exists() {
             fs::remove_file(socket_path).unwrap();
         }
@@ -40,7 +40,7 @@ impl Protocol {
 
     pub fn new_send() -> Result<Self, anyhow::Error> {
         let sock = UnixDatagram::unbound().unwrap();
-        sock.connect(SOCKET_PATH).unwrap();
+        sock.connect(SOCKET_PATH.as_path()).unwrap();
         Ok(Protocol { sock })
     }
 

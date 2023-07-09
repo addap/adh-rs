@@ -1,3 +1,4 @@
+use adh_rs::is_development;
 use gtk::prelude::*;
 use lazy_static::lazy_static;
 use libappindicator::{AppIndicator, AppIndicatorStatus};
@@ -13,12 +14,13 @@ lazy_static! {
     /// Otherwise we use a resource/ directory installed on the system.
     /// a.d. TODO how do I put the png into that directory during `cargo install`?
     static ref ICON_PATH: PathBuf = {
-        if cfg!(debug_assertions) {
+        if is_development() {
             Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("resources")
                 .to_owned()
         } else {
-            Path::new("/usr/share/adh-rs/resources").to_owned()
+            let home = std::env::var("HOME").expect("$HOME is unset");
+            Path::new(&home).join(".local/share/adh-rs/resources").to_owned()
         }
     };
 }
