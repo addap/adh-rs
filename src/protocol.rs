@@ -5,10 +5,10 @@ use std::{fs, os::unix::net::UnixDatagram, path::Path};
 use crate::{Weights, SOCKET_PATH};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub enum Command {
+pub enum GUICommand {
     SetWeights(Weights),
     Toggle,
-    // Quit,
+    Quit,
 }
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ impl Protocol {
         Ok(Protocol { sock })
     }
 
-    pub fn send(&self, message: &Command) -> Result<(), anyhow::Error> {
+    pub fn send(&self, message: &GUICommand) -> Result<(), anyhow::Error> {
         let serialized_command = bincode::serialize(message)?;
 
         let sent_bytes = self.sock.send(&serialized_command)?;
@@ -54,11 +54,11 @@ impl Protocol {
         Ok(())
     }
 
-    pub fn recv(&self) -> Result<Command, anyhow::Error> {
+    pub fn recv(&self) -> Result<GUICommand, anyhow::Error> {
         let mut buf = vec![0; 1024];
         let read_bytes = self.sock.recv(&mut buf)?;
 
-        let command: Command = bincode::deserialize(&buf[..read_bytes])?;
+        let command: GUICommand = bincode::deserialize(&buf[..read_bytes])?;
         Ok(command)
     }
 }

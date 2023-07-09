@@ -29,17 +29,20 @@ pub fn main() -> iced::Result {
     let screen_size = (1920, 1080);
     let window_position = (
         screen_size.0 - SCREEN_PADDING - window_size.0,
-        // TODO calculation does not work as expected
+        // a.d. TODO calculation does not work as expected, eyeballed subtracting another 50.
         screen_size.1 - SCREEN_PADDING - window_size.1 - 50,
     );
 
     TrayUtility::run(Settings {
         antialiasing: true,
         window: iced::window::Settings {
+            // set resizable = false to make window floating on wayland (sway).
+            resizable: false,
             size: window_size,
             max_size: Some(window_size),
             position: Position::Specific(window_position.0 as i32, window_position.1 as i32),
             platform_specific: iced::window::PlatformSpecific {
+                // set x11 window types to make window floating on x11 (i3).
                 x11_window_type: vec![
                     winit::platform::x11::XWindowType::Notification,
                     winit::platform::x11::XWindowType::Utility,
@@ -51,7 +54,9 @@ pub fn main() -> iced::Result {
     })
 }
 
-// This application is meant to be used as a small floating window above the system tray.
+/// This application is meant to be used as a small floating window.
+/// It renders something like an equalizer to give weights to different frequency bands.
+/// Based on the weights, colored noise is generated.
 #[derive(Debug)]
 struct TrayUtility {
     equalizer: equalizer::State,
@@ -173,7 +178,7 @@ impl Application for TrayUtility {
             }
             Message::ConfirmWeights => {
                 self.protocol
-                    .send(&protocol::Command::SetWeights(self.weights))
+                    .send(&protocol::GUICommand::SetWeights(self.weights))
                     .unwrap();
             }
             Message::Clear => {
@@ -184,11 +189,11 @@ impl Application for TrayUtility {
                 return self.window_close();
             }
             Message::ExitDaemon => {
-                // self.protocol.send(&protocol::Command::Quit).unwrap();
-                // return self.window_close();
+                self.protocol.send(&protocol::GUICommand::Quit).unwrap();
+                return self.window_close();
             }
             Message::TogglePlay => {
-                self.protocol.send(&protocol::Command::Toggle).unwrap();
+                self.protocol.send(&protocol::GUICommand::Toggle).unwrap();
             }
             Message::SaveSlot(idx) => self.slots.save_slot(idx, self.weights),
             Message::RecallSlot(idx) => {
