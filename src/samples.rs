@@ -1,5 +1,17 @@
+//! Module to handle collections of audio samples, turning them into iterators and blending between different audio samples.
+//! a.d. TODO does fundsp already provide something like this? Then I could just plug in the generated sample into the fundsp and don't need all this.
+//! Yes, we may be able to use
+//!   1. Wave32 to hold a sample slice
+//!   2. WavePlayer32 to act as an AudioUnit for the Wave32
+//!   3. Sequencer32 to play multiple WavePlayer32 and fade between them
+//!   4. SequencerBackend32 to act as the final mixed AudioUnit that we give to cpal
+//!   
+//! Although I'm unsure if this is the better solution. The fade-in/fade-out of the Sequencer would have to be timed exactly right so that the final noise
+//! does not change in volume during the fade between two samples because it fades to silence instead of fading between two different samples as we do here.
+//! Also, the sequencer does not loop (only reset which would fuck with fading) so we would need to continuously push new WavePlayers to the Sequencer.
+
 use anyhow::anyhow;
-use fundsp::prelude::lerp;
+use lerp::Lerp;
 use std::f32;
 
 pub const CHUNK_SAMPLES: usize = 44_100 * 3;
@@ -118,7 +130,7 @@ impl BlendType {
             }
         };
 
-        lerp(a, b, weight)
+        Lerp::lerp(a, b, weight)
     }
 }
 

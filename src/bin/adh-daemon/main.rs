@@ -136,9 +136,13 @@ fn main() -> Result<(), anyhow::Error> {
                     .unwrap()
                     .with_blend(BlendType::Sigmoid);
 
-                let new_audio_stream = play(chunks);
-                playing = true;
-                audio_stream = Some(new_audio_stream);
+                match play(chunks) {
+                    Ok(new_audio_stream) => {
+                        playing = true;
+                        audio_stream = Some(new_audio_stream);
+                    }
+                    Err(e) => eprintln!("{}", e),
+                }
             }
             // Some backends support pausing playback of the audio stream so we try it here.
             Ok(DaemonCommand::GUI(GUICommand::Toggle)) => {

@@ -1,5 +1,4 @@
 use equalizer::canvas_size;
-use fundsp::math::lerp;
 use iced::widget::column;
 use iced::window::{self, Position};
 use iced::{
@@ -7,6 +6,7 @@ use iced::{
 };
 use iced_runtime::core::event::Status;
 use iced_runtime::core::keyboard::KeyCode;
+use lerp::Lerp;
 use std::usize;
 use xdg::{self, BaseDirectories};
 
@@ -160,7 +160,7 @@ impl Application for TrayUtility {
                         for (i, segment) in (start_segment..=end_segment).enumerate() {
                             // segment_diff is never 0 here because we checked that segment_diff >= 2.
                             let t = i as f32 / segment_diff as f32;
-                            let weight = lerp(start_weight, end_weight, t);
+                            let weight = Lerp::lerp(start_weight, end_weight, t);
 
                             weight_changes.push((segment, weight));
                         }

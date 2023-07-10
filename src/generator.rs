@@ -1,4 +1,4 @@
-use fundsp::prelude::{lerp, sqrt};
+use lerp::Lerp;
 use rand::{self, distributions::Distribution, SeedableRng};
 use rustdct::DctPlanner;
 
@@ -29,7 +29,7 @@ pub fn get_freq_weight(weights: &Weights, freq: f32) -> f32 {
     let (left, right) = (weight_bin.floor(), weight_bin.ceil());
 
     let t = weight_bin - left;
-    let weight = lerp(weights.v[left as usize], weights.v[right as usize], t);
+    let weight = Lerp::lerp(weights.v[left as usize], weights.v[right as usize], t);
     return weight;
 }
 
@@ -62,7 +62,7 @@ pub fn idct(fs: &mut [f32]) {
     let idct = DctPlanner::new().plan_dct3(fs.len());
     idct.process_dct3(fs);
 
-    let scale: f32 = sqrt(2.0 / CHUNK_SAMPLES as f32);
+    let scale = (2.0 / CHUNK_SAMPLES as f32).sqrt();
     for f in fs {
         *f = *f * scale;
     }

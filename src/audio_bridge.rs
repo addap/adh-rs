@@ -12,10 +12,10 @@
 //! implements Iterator that does the blending in the next() methid.
 //! Then we use the iterator analogously to how we use it now.
 
+use anyhow::anyhow;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SizedSample};
 use std::f32;
-use std::time::Instant;
 
 use crate::samples::BlendingSamples;
 
@@ -23,51 +23,45 @@ pub struct AudioStream {
     pub stream: cpal::Stream,
 }
 
-pub fn play(chunks: BlendingSamples) -> AudioStream {
+pub fn play(samples: BlendingSamples) -> Result<AudioStream, anyhow::Error> {
     let host = cpal::default_host();
 
     let device = host
         .default_output_device()
-        .expect("Failed to find a default output device");
-    let config = device.default_output_config().unwrap();
+        .ok_or(anyhow!("Failed to find a default output device"))?;
+    let config = device.default_output_config()?;
 
     match config.sample_format() {
-        cpal::SampleFormat::F32 => run2::<f32>(&device, &config.into(), chunks).unwrap(),
-        cpal::SampleFormat::I16 => run2::<i16>(&device, &config.into(), chunks).unwrap(),
-        cpal::SampleFormat::U16 => run2::<u16>(&device, &config.into(), chunks).unwrap(),
+        cpal::SampleFormat::F32 => run::<f32>(&device, &config.into(), samples),
+        cpal::SampleFormat::I16 => run::<i16>(&device, &config.into(), samples),
+        cpal::SampleFormat::U16 => run::<u16>(&device, &config.into(), samples),
         _ => panic!("Unsupported format"),
     }
 }
 
-fn run2<T>(
+fn run<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
-    chunks: BlendingSamples,
+    samples: BlendingSamples,
 ) -> Result<AudioStream, anyhow::Error>
 where
     T: SizedSample + FromSample<f32>,
 {
-    let sample_rate = config.sample_rate.0 as f32;
-    println!("sample rate: {}", sample_rate);
+    let sample_rate = config.sample_rate.0;
     let channels = config.channels as usize;
+    println!(
+        "Playing with sample rate {} on {} channels.",
+        sample_rate, channels
+    );
 
-    // let c =
-    // let mut c = c;
-    // c.reset(Some(sample_rate));
-    // c.allocate();
-
-    let mut samples = chunks.into_iter().unwrap();
-    // let mut next_value = move || samples.next().unwrap();
-
+    let mut samples_iter = samples.into_iter()?;
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
 
-    let now = Instant::now();
-
+    // At this point we give the samples_iter to another thread which actually plays the audio, so it needs to be Send.
     let stream = device.build_output_stream(
         config,
-        move |data: &mut [T], _: &cpal::OutputCallbackInfo| {
-            // println!("Now: {}", now.elapsed().as_nanos());
-            write_data2(data, channels, &mut samples)
+        move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
+            write_data(output, channels, &mut samples_iter)
         },
         err_fn,
         None,
@@ -77,17 +71,17 @@ where
     Ok(AudioStream { stream })
 }
 
-fn write_data2<'a, T>(
+fn write_data<'a, T>(
     output: &mut [T],
     channels: usize,
-    next_sample: &mut impl Iterator<Item = (f32, f32)>,
+    samples_iter: &mut impl Iterator<Item = (f32, f32)>,
 ) where
     T: SizedSample + FromSample<f32>,
 {
+    // For each sample time we get a frame containing one element per channel.
+    // a.d. TODO How many channels are there? Is it liek stereo -> 2 channels, dolby digital 5.1 -> 5 channels etc.?
     for frame in output.chunks_mut(channels) {
-        if let Some(sample) = next_sample.next() {
-            // println!("sample ({}, {})", sample.0, sample.1);
-
+        if let Some(sample) = samples_iter.next() {
             let left = T::from_sample(sample.0);
             let right: T = T::from_sample(sample.1);
 

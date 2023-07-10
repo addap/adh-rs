@@ -7,7 +7,6 @@ use std::{
 
 pub mod audio_bridge;
 pub mod generator;
-pub mod misc;
 pub mod protocol;
 pub mod samples;
 pub mod slots;
