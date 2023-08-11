@@ -145,7 +145,9 @@ fn main() -> Result<(), anyhow::Error> {
                 }
             }
             // Some backends support pausing playback of the audio stream so we try it here.
-            Ok(DaemonCommand::GUI(GUICommand::Toggle)) => {
+            Ok(
+                DaemonCommand::GUI(GUICommand::Toggle) | DaemonCommand::Tray(TrayCommand::Toggle),
+            ) => {
                 if let Some(audio_stream) = &audio_stream {
                     let res = if playing {
                         audio_stream.stream.pause().map_err(|e| anyhow!(e))

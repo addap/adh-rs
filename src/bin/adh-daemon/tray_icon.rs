@@ -29,6 +29,8 @@ lazy_static! {
 pub enum TrayCommand {
     /// Run a new GUI instance.
     RunGUI,
+    /// Toggle audio playback.
+    Toggle,
     /// Quit the daemon.
     Quit,
 }
@@ -56,6 +58,15 @@ pub fn main(tx: mpsc::Sender<DaemonCommand>) {
         }
     });
     m.append(&gui_entry);
+
+    let toggle_entry = gtk::MenuItem::with_label("Toggle Playback");
+    toggle_entry.connect_activate({
+        let tx = tx.clone();
+        move |_| {
+            tx.send(DaemonCommand::Tray(TrayCommand::Toggle)).ok();
+        }
+    });
+    m.append(&toggle_entry);
 
     let quit_entry = gtk::MenuItem::with_label("Quit");
     quit_entry.connect_activate({
