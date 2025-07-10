@@ -6,30 +6,32 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.71"
-bincode = "1.3.3"
-cpal = "0.15.2"
-gtk = "^0.16"
-lazy_static = "1.4.0"
-lerp = "0.5.0"
-libappindicator = "0.8.0"
-rand = { version = "0.8.5", features = [ "small_rng" ] }
-rustdct = "0.7.1"
-serde = { version = "1.0.160", features = [ "derive" ] }
-serde_json = "1.0.96"
-systemd = "0.10.0"
-xdg = "2.5.0"
+anyhow = "1.0"
+bincode = { version = "2.0", features = [ "serde" ] }
+cpal = "0.16"
+#gtk4 = "0.9"
+lazy_static = "1.5"
+lerp = "0.5"
+#libappindicator = "0.9"
+rand = { version = "0.9", features = [ "small_rng" ] }
+rustdct = "0.7"
+serde = { version = "1.0", features = [ "derive" ] }
+serde_json = "1.0"
+systemd = "0.10"
+xdg = "3.0"
 
 [dependencies.iced]
 #path = "../iced"
-git = "https://github.com/addap/iced.git"
+#git = "https://github.com/addap/iced.git"
+version = "0.13"
 features = [ "canvas" ]
 
 [dependencies.iced_runtime]
 #path = "../iced/runtime"
-git = "https://github.com/addap/iced.git"
+version = "0.13"
+#git = "https://github.com/addap/iced.git"
 
 [dependencies.winit]
-version = "0.28"
-git = "https://github.com/iced-rs/winit.git"
-rev = "c52db2045d0a2f1b8d9923870de1d4ab1994146e"
+version = "0.30"
+#git = "https://github.com/iced-rs/winit.git"
+#rev = "c52db2045d0a2f1b8d9923870de1d4ab1994146e"

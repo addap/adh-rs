@@ -11,6 +11,8 @@ pub enum GUICommand {
     Quit,
 }
 
+const GUI_COMMAND_BUF_LEN: usize = 1024;
+
 #[derive(Debug)]
 pub struct Protocol {
     sock: UnixDatagram,
@@ -45,7 +47,10 @@ impl Protocol {
     }
 
     pub fn send(&self, message: &GUICommand) -> Result<(), anyhow::Error> {
-        let serialized_command = bincode::serialize(message)?;
+        let serialized_command = bincode::serde::encode_to_vec(message, bincode::config::standard())?;
+        if serialized_command.len() > GUI_COMMAND_BUF_LEN {
+            return Err(anyhow!("Gui Command too big to encode. Increase buffer size."));
+        }
 
         let sent_bytes = self.sock.send(&serialized_command)?;
         if sent_bytes != serialized_command.len() {
@@ -55,10 +60,11 @@ impl Protocol {
     }
 
     pub fn recv(&self) -> Result<GUICommand, anyhow::Error> {
-        let mut buf = vec![0; 1024];
+        let mut buf = vec![0; GUI_COMMAND_BUF_LEN];
         let read_bytes = self.sock.recv(&mut buf)?;
 
-        let command: GUICommand = bincode::deserialize(&buf[..read_bytes])?;
+        let (command, _): (GUICommand, usize) =
+            bincode::serde::decode_from_slice(&buf[..read_bytes], bincode::config::standard())?;
         Ok(command)
     }
 }

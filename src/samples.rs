@@ -205,11 +205,8 @@ impl<I: Iterator<Item = J>, J: IntoIterator<IntoIter = K>, K> BlendingSamplesIte
     }
 }
 
-impl<
-        I: Iterator<Item = J>,
-        J: IntoIterator<Item = f32, IntoIter = K>,
-        K: Iterator<Item = f32> + ExactSizeIterator,
-    > Iterator for BlendingSamplesIterator<I, K>
+impl<I: Iterator<Item = J>, J: IntoIterator<Item = f32, IntoIter = K>, K: Iterator<Item = f32> + ExactSizeIterator>
+    Iterator for BlendingSamplesIterator<I, K>
 {
     type Item = (f32, f32);
 

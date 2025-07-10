@@ -15,7 +15,7 @@ use adh_rs::{
     protocol::{GUICommand, Protocol},
     samples::{BlendType, BlendingSamples},
 };
-use tray_icon::TrayCommand;
+// use tray_icon::TrayCommand;
 
 lazy_static! {
     /// Which program to start when executing a new GUI process.
@@ -35,14 +35,14 @@ lazy_static! {
 /// Commands that can be sent to the daemon.
 pub enum DaemonCommand {
     /// Commands from the system tray icon.
-    Tray(TrayCommand),
+    // Tray(TrayCommand),
     /// Commands from the GUI.
     GUI(GUICommand),
 }
 
 /// Create a protocol instance for communicating with the GUI.
 /// In development mode, the daemon creates the socket itself.
-/// Othersize, we get the socket file descriptor from systemd.
+/// Otherwise, we get the socket file descriptor from systemd.
 fn get_protocol() -> Protocol {
     if is_development() {
         Protocol::new_recv().unwrap()
@@ -92,10 +92,10 @@ fn main() -> Result<(), anyhow::Error> {
     // Spawn a thread for the system tray icon (gtk somehow takes control of it so it needs to be its own thread).
     // Also span a thread to listen on the socket conntected to the GUI that will relay commands from the socket to the mpsc.
     // Both threads are immediately detached because we do not join them. When the damon quits, the threads will also be killed by the OS.
-    thread::spawn({
-        let tx = tx.clone();
-        move || tray_icon::main(tx)
-    });
+    // thread::spawn({
+    //     let tx = tx.clone();
+    //     move || tray_icon::main(tx)
+    // });
     thread::spawn(move || gui_relay(tx));
 
     let mut audio_stream = None;
@@ -107,23 +107,23 @@ fn main() -> Result<(), anyhow::Error> {
             // We cannot run the GUI as a separate thread because iced wants to be tha main thread.
             // So we spawn a new process.
             // We pass along the --dev argument (it's to ugly but the best I came up with so far)
-            Ok(DaemonCommand::Tray(TrayCommand::RunGUI)) => {
-                println!("exec gui process");
-                let gui_path = GUI_PROGRAM_NAME.as_path();
+            // Ok(DaemonCommand::Tray(TrayCommand::RunGUI)) => {
+            //     println!("exec gui process");
+            //     let gui_path = GUI_PROGRAM_NAME.as_path();
 
-                let mut gui_command = std::process::Command::new(gui_path);
-                if is_development() {
-                    println!("Daemon is in dev mode so start the GUI also in dev mode.");
-                    gui_command.arg("--dev");
-                }
-                match gui_command.spawn() {
-                    Ok(_) => {}
-                    Err(e) => eprintln!("Spawning GUI failed: {e}"),
-                }
-            }
+            //     let mut gui_command = std::process::Command::new(gui_path);
+            //     if is_development() {
+            //         println!("Daemon is in dev mode so start the GUI also in dev mode.");
+            //         gui_command.arg("--dev");
+            //     }
+            //     match gui_command.spawn() {
+            //         Ok(_) => {}
+            //         Err(e) => eprintln!("Spawning GUI failed: {e}"),
+            //     }
+            // }
             // Quit command can come from both the GUI and the system tray icon.
             // Returning from the main function here will the threads we spawned.
-            Ok(DaemonCommand::Tray(TrayCommand::Quit) | DaemonCommand::GUI(GUICommand::Quit)) => {
+            Ok(/*DaemonCommand::Tray(TrayCommand::Quit) | */ DaemonCommand::GUI(GUICommand::Quit)) => {
                 println!("Daemon quit");
                 return Ok(());
             }
@@ -145,9 +145,7 @@ fn main() -> Result<(), anyhow::Error> {
                 }
             }
             // Some backends support pausing playback of the audio stream so we try it here.
-            Ok(
-                DaemonCommand::GUI(GUICommand::Toggle) | DaemonCommand::Tray(TrayCommand::Toggle),
-            ) => {
+            Ok(DaemonCommand::GUI(GUICommand::Toggle) /* | DaemonCommand::Tray(TrayCommand::Toggle)*/) => {
                 if let Some(audio_stream) = &audio_stream {
                     let res = if playing {
                         audio_stream.stream.pause().map_err(|e| anyhow!(e))

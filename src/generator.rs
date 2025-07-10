@@ -1,5 +1,5 @@
 use lerp::Lerp;
-use rand::{self, distributions::Distribution, SeedableRng};
+use rand::{self, distr::Distribution, SeedableRng};
 use rustdct::DctPlanner;
 
 use crate::{
@@ -73,8 +73,8 @@ pub fn idct(fs: &mut [f32]) {
 
 // White noise frequencies are sampled uniformly random from -1..=1.
 pub fn gen_white_freqs() -> Vec<f32> {
-    let r = rand::distributions::Uniform::new_inclusive(-1.0, 1.0);
-    let small_rng = rand::rngs::SmallRng::from_entropy();
+    let r = rand::distr::Uniform::new_inclusive(-1.0, 1.0).unwrap();
+    let small_rng = rand::rngs::SmallRng::from_os_rng();
     let my_freqs: Vec<f32> = r.sample_iter(small_rng).take(CHUNK_SAMPLES).collect();
 
     my_freqs

@@ -49,10 +49,7 @@ where
 {
     let sample_rate = config.sample_rate.0;
     let channels = config.channels as usize;
-    println!(
-        "Playing with sample rate {} on {} channels.",
-        sample_rate, channels
-    );
+    println!("Playing with sample rate {} on {} channels.", sample_rate, channels);
 
     let mut samples_iter = samples.into_iter()?;
     let err_fn = |err| eprintln!("an error occurred on stream: {}", err);
@@ -60,9 +57,7 @@ where
     // At this point we give the samples_iter to another thread which actually plays the audio, so it needs to be Send.
     let stream = device.build_output_stream(
         config,
-        move |output: &mut [T], _: &cpal::OutputCallbackInfo| {
-            write_data(output, channels, &mut samples_iter)
-        },
+        move |output: &mut [T], _: &cpal::OutputCallbackInfo| write_data(output, channels, &mut samples_iter),
         err_fn,
         None,
     )?;
@@ -71,11 +66,8 @@ where
     Ok(AudioStream { stream })
 }
 
-fn write_data<'a, T>(
-    output: &mut [T],
-    channels: usize,
-    samples_iter: &mut impl Iterator<Item = (f32, f32)>,
-) where
+fn write_data<'a, T>(output: &mut [T], channels: usize, samples_iter: &mut impl Iterator<Item = (f32, f32)>)
+where
     T: SizedSample + FromSample<f32>,
 {
     // For each sample time we get a frame containing one element per channel.
